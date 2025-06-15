@@ -1,824 +1,831 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>搁彡 (Nine Men's Morris)</title>
-    <style>
-        /* CSS样式与上一版相同，此处为简洁省略... */
-        /* 您可以沿用上一版的CSS，或者将下面的完整CSS粘贴进去 */
-        :root {
-            --color-board: #d2b48c; --color-bg: #f5f5dc; --color-line: #000000;
-            --color-player1: #ffffff; --color-player2: #000000; --color-highlight: #ff4136;
-            --color-valid-move: #2ecc40; --color-text: #333333; --color-error: #b33a3a;
-            --board-size: 90vmin; 
-        }
-        @media (min-width: 800px) { :root { --board-size: min(600px, 85vh); } }
-        html, body { width: 100%; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            min-height: 100vh; background-color: var(--color-bg); color: var(--color-text);
-            padding: 15px; box-sizing: border-box; -webkit-user-select: none; user-select: none;
-        }
-        #game-menu {
-            text-align: center; padding: 30px; background: white; border-radius: 16px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        #game-menu h1 { margin-top: 0; color: var(--color-text); }
-        #game-menu .menu-buttons { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
-        #game-menu button {
-            padding: 15px 30px; font-size: 1.1rem; font-weight: bold; color: white;
-            background-color: var(--color-highlight); border: none; border-radius: 8px; cursor: pointer;
-            transition: background-color 0.2s, transform 0.2s;
-        }
-        #game-menu button:hover { background-color: #c53028; transform: scale(1.05); }
-        #game-container {
-            display: none; width: 100%; max-width: var(--board-size); flex-direction: column;
-            align-items: center; gap: 20px;
-            position: relative; /* <--- 新增此行，为按钮提供定位参照物 */
-        }
-        #board-svg {
-            width: var(--board-size); height: var(--board-size);
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
-        }
-        .board-bg { fill: var(--color-board); }
-        .board-line { stroke: var(--color-line); stroke-width: 4; stroke-linecap: round; }
-        .board-point { fill: rgba(0,0,0,0.2); cursor: pointer; transition: r 0.2s ease, fill 0.2s ease; }
-        .piece {
-            stroke-width: 2; stroke: rgba(0,0,0,0.3); transition: all 0.2s ease-in-out;
-            pointer-events: none;
-        }
-        .piece-p1 { fill: var(--color-player1); }
-        .piece-p2 { fill: var(--color-player2); }
-        .piece-blocked { stroke: var(--color-highlight); stroke-width: 4; stroke-linecap: round; }
-        .highlight-selected { fill: none; stroke: var(--color-highlight); stroke-width: 4; pointer-events: none; }
-        .highlight-valid { fill: var(--color-valid-move); opacity: 0.5; pointer-events: none; }
-        #status-panel {
-            width: 100%; text-align: center; background: rgba(255, 255, 255, 0.5); padding: 15px;
-            border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); box-sizing: border-box;
-        }
-        #message {
-            font-size: 1.1rem; font-weight: 500; min-height: 40px; display: flex;
-            align-items: center; justify-content: center; transition: color 0.3s ease;
-        }
-        #message.error-message { color: var(--color-error); animation: shake 0.5s; }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-            20%, 40%, 60%, 80% { transform: translateX(5px); }
-        }
-        #info-bar {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-top: 10px; font-size: 0.9rem;
-        }
-        .player-info { display: flex; align-items: center; gap: 8px; }
-        .info-piece {
-            width: 20px; height: 20px; border-radius: 50%; display: inline-block;
-            border: 2px solid rgba(0,0,0,0.3);
-        }
-        #restart-button {
-            display: none; margin-top: 15px; padding: 10px 20px; font-size: 1rem; font-weight: bold;
-            color: white; background-color: var(--color-highlight); border: none; border-radius: 8px;
-            cursor: pointer; transition: background-color 0.2s;
-        }
+# import pygame
+# import sys
+# import math
+# import os
+
+# # --- 1. 初始化和常量 (Initialization and Constants) ---
+
+# # Pygame 初始化
+# pygame.init()
+# pygame.font.init()
+
+# # 屏幕设置 (使用小尺寸)
+# SCREEN_WIDTH = 640
+# SCREEN_HEIGHT = 740
+# screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+# pygame.display.set_caption("搁彡 (Diagonal Rules)")
+
+# # 颜色
+# COLOR_BOARD = (210, 180, 140)
+# COLOR_BG = (245, 245, 220)
+# COLOR_LINE = (0, 0, 0)
+# COLOR_PLAYER1 = (255, 255, 255)
+# COLOR_PLAYER2 = (0, 0, 0)
+# COLOR_HIGHLIGHT = (255, 0, 0)
+# COLOR_TEXT = (50, 50, 50)
+
+# # --- 【新增】字体处理 (Font Handling) ---
+# FONT_CN_PATH = "simhei.ttf" # 默认字体文件名
+# # 尝试在系统路径（主要针对Windows）中寻找字体
+# if sys.platform == "win32":
+#     font_path_system = os.path.join(os.environ.get("SystemRoot", "C:/Windows"), "Fonts", FONT_CN_PATH)
+#     if os.path.exists(font_path_system):
+#         FONT_CN_PATH = font_path_system
+
+# try:
+#     FONT_STATUS_CN = pygame.font.Font(FONT_CN_PATH, 26)
+#     FONT_INFO_CN = pygame.font.Font(FONT_CN_PATH, 20)
+# except FileNotFoundError:
+#     print(f"错误：中文字体 '{FONT_CN_PATH}' 未找到！")
+#     print("请下载一个中文字体 (如 simhei.ttf) 并与游戏文件放在同一目录下。")
+#     # 使用一个备用英文字体，防止程序崩溃
+#     FONT_STATUS_CN = pygame.font.SysFont('Arial', 30)
+#     FONT_INFO_CN = pygame.font.SysFont('Arial', 24)
+
+
+# # 游戏常量
+# PIECE_RADIUS = 16
+# CLICK_RADIUS = 25
+
+# # --- 2. 游戏规则数据结构 (保持不变) ---
+# POSITIONS = [
+#     'O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
+#     'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8',
+# ]
+# COORDS = {
+#     'O1': (70, 70), 'O2': (320, 70), 'O3': (570, 70), 'O4': (570, 320), 'O5': (570, 570), 'O6': (320, 570),
+#     'O7': (70, 570), 'O8': (70, 320), 'M1': (170, 170), 'M2': (320, 170), 'M3': (470, 170), 'M4': (470, 320),
+#     'M5': (470, 470), 'M6': (320, 470), 'M7': (170, 470), 'M8': (170, 320), 'I1': (250, 250), 'I2': (320, 250),
+#     'I3': (390, 250), 'I4': (390, 320), 'I5': (390, 390), 'I6': (320, 390), 'I7': (250, 390), 'I8': (250, 320),
+# }
+# ADJACENCY = {
+#     'O1': ['O2', 'O8', 'M1'], 'O2': ['O1', 'O3', 'M2'], 'O3': ['O2', 'O4', 'M3'], 'O4': ['O3', 'O5', 'M4'],
+#     'O5': ['O4', 'O6', 'M5'], 'O6': ['O5', 'O7', 'M6'], 'O7': ['O6', 'O8', 'M7'], 'O8': ['O7', 'O1', 'M8'],
+#     'M1': ['M2', 'M8', 'O1', 'I1'], 'M2': ['M1', 'M3', 'O2', 'I2'], 'M3': ['M2', 'M4', 'O3', 'I3'],
+#     'M4': ['M3', 'M5', 'O4', 'I4'], 'M5': ['M4', 'M6', 'O5', 'I5'], 'M6': ['M5', 'M7', 'O6', 'I6'],
+#     'M7': ['M6', 'M8', 'O7', 'I7'], 'M8': ['M7', 'M1', 'O8', 'I8'], 'I1': ['I2', 'I8', 'M1'],
+#     'I2': ['I1', 'I3', 'M2'], 'I3': ['I2', 'I4', 'M3'], 'I4': ['I3', 'I5', 'M4'], 'I5': ['I4', 'I6', 'M5'],
+#     'I6': ['I5', 'I7', 'M6'], 'I7': ['I6', 'I8', 'M7'], 'I8': ['I7', 'I1', 'M8']
+# }
+# MILLS = [
+#     ['O1', 'O2', 'O3'], ['O3', 'O4', 'O5'], ['O5', 'O6', 'O7'], ['O7', 'O8', 'O1'], ['M1', 'M2', 'M3'],
+#     ['M3', 'M4', 'M5'], ['M5', 'M6', 'M7'], ['M7', 'M8', 'M1'], ['I1', 'I2', 'I3'], ['I3', 'I4', 'I5'],
+#     ['I5', 'I6', 'I7'], ['I7', 'I8', 'I1'], ['O2', 'M2', 'I2'], ['O4', 'M4', 'I4'], ['O6', 'M6', 'I6'],
+#     ['O8', 'M8', 'I8'], ['O1', 'M1', 'I1'], ['O3', 'M3', 'I3'], ['O5', 'M5', 'I5'], ['O7', 'M7', 'I7']
+# ]
+
+
+# # --- 3. 游戏主类 (Main Game Class) ---
+
+# class Game:
+#     def __init__(self):
+#         self.board = {pos: 0 for pos in POSITIONS}
+#         self.phase = 1
+#         self.turn = 1
+#         self.pieces_to_place = {1: 12, 2: 12}
+#         self.game_state = "place"
+#         self.selected_piece_pos = None
+#         self.message = ""
+#         self.newly_formed_mill = []
+#         self.clock = pygame.time.Clock()
+#         self.update_message()
+
+#     def get_piece_counts(self):
+#         p1_count = sum(1 for v in self.board.values() if v == 1)
+#         p2_count = sum(1 for v in self.board.values() if v == 2)
+#         return p1_count, p2_count
+
+#     # 【修改】完全中文化的提示信息更新
+#     def update_message(self):
+#         player_name = f"白方 (玩家1)" if self.turn == 1 else f"黑方 (玩家2)"
+#         if self.game_state == "place":
+#             self.message = f"轮到{player_name}: 请放置棋子。剩余: {self.pieces_to_place[self.turn]}"
+#         elif self.game_state == "remove":
+#             self.message = f"{player_name}三连已成！请选择一个对方棋子进行“薅”子！"
+#         elif self.game_state == "move_select":
+#             self.message = f"轮到{player_name}: 请选择要移动的己方棋子。"
+#         elif self.game_state == "move_place":
+#             self.message = f"轮到{player_name}: 请选择一个相邻的空位。"
+#         elif self.game_state == "game_over":
+#             winner_name = "白方 (玩家1)" if self.turn == 2 else "黑方 (玩家2)"
+#             self.message = f"游戏结束！{winner_name}胜利！按 'R' 重新开始。"
+
+#     # (其余函数保持不变，无需修改)
+#     def switch_turn(self):
+#         self.turn = 3 - self.turn
+#         self.newly_formed_mill = []
+#         if self.phase == 1 and all(p == 0 for p in self.pieces_to_place.values()):
+#             self.phase = 2
+#             for pos, val in self.board.items():
+#                 if val == -1: self.board[pos] = 0
+#             self.turn = 2
+#             self.game_state = "move_select"
+#         elif self.phase == 2:
+#              if self.check_win_condition(): return
+#              if self.check_stalemate():
+#                  winner_name = "白方" if self.turn == 2 else "黑方"
+#                  self.game_state = "game_over"
+#                  self.message = f"游戏结束！{winner_name}胜利 (对手已无路可走)！按 'R' 重新开始。"
+#                  return
+#         self.update_message()
+    
+#     def get_pos_from_mouse(self, mouse_pos):
+#         for pos_id, coord in COORDS.items():
+#             if math.hypot(mouse_pos[0] - coord[0], mouse_pos[1] - coord[1]) <= CLICK_RADIUS:
+#                 return pos_id
+#         return None
+
+#     def check_mill(self, pos, player):
+#         for mill in MILLS:
+#             if pos in mill and all(self.board.get(p) == player for p in mill):
+#                 if sorted(mill) not in self.newly_formed_mill:
+#                     self.newly_formed_mill.append(sorted(mill))
+#                     return True
+#         return False
+
+#     def is_in_a_mill(self, pos):
+#         player = self.board[pos]
+#         if player == 0: return False
+#         for mill in MILLS:
+#             if pos in mill and all(self.board.get(p) == player for p in mill):
+#                 return True
+#         return False
         
-        /* --- Styles for Instructions Button & Modal --- */
-        #instructions-button {
-            position: absolute;
-            top: 50%;
-            right: -50px; /* 将按钮定位在容器右边线外侧50像素处 */
-            transform: translateY(-50%);
-            width: 40px;
-            height: 40px;
-            background-color: var(--color-highlight); color: white; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center; font-size: 1.6rem;
-            font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            transition: all 0.2s ease; user-select: none; z-index: 100;
-        }
-        #instructions-button:hover { transform: scale(1.1); background-color: #c53028; }
+#     def check_win_condition(self):
+#         p1_count, p2_count = self.get_piece_counts()
+#         opponent_pieces = p2_count if self.turn == 1 else p1_count
+#         if self.phase == 2 and opponent_pieces < 3:
+#             self.game_state = "game_over"
+#             self.update_message()
+#             return True
+#         return False
+    
+#     def check_stalemate(self):
+#         if self.phase != 2: return False
+#         for pos, player in self.board.items():
+#             if player == self.turn:
+#                 for neighbor in ADJACENCY[pos]:
+#                     if self.board[neighbor] == 0:
+#                         return False
+#         return True
+
+#     def has_valid_capture_target(self):
+#         opponent = 3 - self.turn
+#         for piece_pos, owner in self.board.items():
+#             if owner == opponent and not self.is_in_a_mill(piece_pos):
+#                 return True
+#         return False
+
+#     def handle_click(self, pos_id):
+#         if not pos_id: return
+#         if self.game_state == "place":
+#             if self.board[pos_id] == 0:
+#                 self.board[pos_id] = self.turn
+#                 self.pieces_to_place[self.turn] -= 1
+#                 if self.check_mill(pos_id, self.turn):
+#                     if self.has_valid_capture_target():
+#                         self.game_state = "remove"
+#                     else:
+#                         self.switch_turn()
+#                 else:
+#                     self.switch_turn()
+#                 self.update_message()
+#         elif self.game_state == "remove":
+#             opponent = 3 - self.turn
+#             if self.board.get(pos_id) == opponent:
+#                 if not self.is_in_a_mill(pos_id):
+#                     self.board[pos_id] = -1 if self.phase == 1 else 0
+#                     if not self.check_win_condition():
+#                          self.game_state = "place" if self.phase == 1 else "move_select"
+#                          self.switch_turn()
+#                     self.update_message()
+#         elif self.game_state == "move_select":
+#             if self.board[pos_id] == self.turn:
+#                 self.selected_piece_pos = pos_id
+#                 self.game_state = "move_place"
+#                 self.update_message()
+#         elif self.game_state == "move_place":
+#             if self.board[pos_id] == self.turn:
+#                 self.selected_piece_pos = pos_id
+#                 self.update_message()
+#             elif self.board[pos_id] == 0 and pos_id in ADJACENCY[self.selected_piece_pos]:
+#                 self.board[self.selected_piece_pos] = 0
+#                 self.board[pos_id] = self.turn
+#                 if self.check_mill(pos_id, self.turn):
+#                     if self.has_valid_capture_target():
+#                         self.game_state = "remove"
+#                     else:
+#                         self.switch_turn()
+#                 else:
+#                     self.switch_turn()
+#                 self.selected_piece_pos = None
+#                 self.update_message()
+#             else:
+#                  self.selected_piece_pos = None
+#                  self.game_state = "move_select"
+#                  self.update_message()
+
+#     def draw_board(self):
+#         screen.fill(COLOR_BG)
+#         pygame.draw.rect(screen, COLOR_BOARD, (20, 20, 600, 600))
+#         pygame.draw.rect(screen, COLOR_LINE, (70, 70, 500, 500), 4)
+#         pygame.draw.rect(screen, COLOR_LINE, (170, 170, 300, 300), 4)
+#         pygame.draw.rect(screen, COLOR_LINE, (250, 250, 140, 140), 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O2'], COORDS['I2'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O4'], COORDS['I4'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O6'], COORDS['I6'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O8'], COORDS['I8'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O1'], COORDS['I1'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O3'], COORDS['I3'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O5'], COORDS['I5'], 4)
+#         pygame.draw.line(screen, COLOR_LINE, COORDS['O7'], COORDS['I7'], 4)
+
+#     def draw_pieces(self):
+#         for pos_id, coord in COORDS.items():
+#             player = self.board[pos_id]
+#             if player == 1:
+#                 pygame.draw.circle(screen, COLOR_PLAYER1, coord, PIECE_RADIUS)
+#             elif player == 2:
+#                 pygame.draw.circle(screen, COLOR_PLAYER2, coord, PIECE_RADIUS)
+#             elif player == -1:
+#                 pygame.draw.line(screen, COLOR_HIGHLIGHT, (coord[0]-10, coord[1]-10), (coord[0]+10, coord[1]+10), 4)
+#                 pygame.draw.line(screen, COLOR_HIGHLIGHT, (coord[0]+10, coord[1]-10), (coord[0]-10, coord[1]+10), 4)
+#             if self.selected_piece_pos == pos_id:
+#                 pygame.draw.circle(screen, COLOR_HIGHLIGHT, coord, PIECE_RADIUS + 4, 4)
+
+#     # 【修改】重新排版的状态面板，使用中文字体
+#     def draw_status_panel(self):
+#         # 绘制底部面板背景
+#         pygame.draw.rect(screen, COLOR_BOARD, (0, 640, SCREEN_WIDTH, 100))
         
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.65); display: none; /* Hidden by default */
-            align-items: center; justify-content: center; z-index: 1000;
-            padding: 20px; box-sizing: border-box;
-        }
-        .modal-content {
-            background: var(--color-bg); padding: 30px 40px; border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.25); width: 90%; max-width: 650px;
-            max-height: 85vh; overflow-y: auto; position: relative;
-            animation: slide-in 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-        @keyframes slide-in {
-            from { transform: translateY(-40px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .close-button {
-            position: absolute; top: 10px; right: 15px; font-size: 2.8rem;
-            color: #aaa; cursor: pointer; line-height: 1; transition: color 0.2s;
-        }
-        .close-button:hover { color: #333; }
-        #rules-content h2 {
-            text-align: center; color: var(--color-text); margin-top: 0;
-            margin-bottom: 25px;
-        }
-        #rules-content h3 {
-            color: var(--color-highlight); border-bottom: 2px solid #ddd;
-            padding-bottom: 8px; margin-top: 20px; margin-bottom: 15px;
-        }
-        #rules-content p, #rules-content li { color: var(--color-text); }
-        #rules-content ul { padding-left: 25px; list-style-type: disc; }
-        #rules-content strong { color: #000; font-weight: 600; }
+#         # 1. 绘制主要状态信息 (居中)
+#         text_surface = FONT_STATUS_CN.render(self.message, True, COLOR_TEXT)
+#         text_rect = text_surface.get_rect(center=(SCREEN_WIDTH / 2, 670)) # 靠上一点
+#         screen.blit(text_surface, text_rect)
 
-    </style>
-</head>
-<body>
-
-    <div id="game-menu">
-        <h1>搁彡(张良棋)</h1>
-        <div class="menu-buttons">
-            <button id="pve-button">玩家 vs 电脑</button>
-            <button id="pvp-button">玩家 vs 玩家</button>
-        </div>
-    </div>
-
-    <div id="game-container">
-        <div id="instructions-button">?</div>
-        <svg id="board-svg" viewBox="0 0 640 640"></svg>
-        <div id="status-panel">
-            <div id="message">Welcome!</div>
-            <div id="info-bar">
-                <div class="player-info">
-                    <span class="info-piece piece-p1"></span>
-                    <span id="p1-info"></span>
-                </div>
-                <div class="player-info">
-                    <span id="p2-info"></span>
-                    <span class="info-piece piece-p2"></span>
-                </div>
-            </div>
-            <button id="restart-button">返回菜单</button>
-        </div>
-    </div>
-
-    <div id="instructions-modal" class="modal-overlay">
-        <div class="modal-content">
-            <span id="close-modal" class="close-button">&times;</span>
-            <div id="rules-content">
-                <h2>Game Rules</h2>
-                </div>
-        </div>
-    </div>
-
-
-    <script>
-    // --- 1. Game Constants & Data Structures ---
-    const POSITIONS = [
-        'O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
-        'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8',
-    ];
-    const COORDS = {
-        'O1': { x: 70, y: 70 }, 'O2': { x: 320, y: 70 }, 'O3': { x: 570, y: 70 }, 'O4': { x: 570, y: 320 }, 
-        'O5': { x: 570, y: 570 }, 'O6': { x: 320, y: 570 }, 'O7': { x: 70, y: 570 }, 'O8': { x: 70, y: 320 },
-        'M1': { x: 170, y: 170 }, 'M2': { x: 320, y: 170 }, 'M3': { x: 470, y: 170 }, 'M4': { x: 470, y: 320 },
-        'M5': { x: 470, y: 470 }, 'M6': { x: 320, y: 470 }, 'M7': { x: 170, y: 470 }, 'M8': { x: 170, y: 320 },
-        'I1': { x: 250, y: 250 }, 'I2': { x: 320, y: 250 }, 'I3': { x: 390, y: 250 }, 'I4': { x: 390, y: 320 },
-        'I5': { x: 390, y: 390 }, 'I6': { x: 320, y: 390 }, 'I7': { x: 250, y: 390 }, 'I8': { x: 250, y: 320 },
-    };
-    const ADJACENCY = {
-        'O1': ['O2', 'O8', 'M1'], 'O2': ['O1', 'O3', 'M2'], 'O3': ['O2', 'O4', 'M3'], 'O4': ['O3', 'O5', 'M4'],
-        'O5': ['O4', 'O6', 'M5'], 'O6': ['O5', 'O7', 'M6'], 'O7': ['O6', 'O8', 'M7'], 'O8': ['O7', 'O1', 'M8'],
-        'M1': ['M2', 'M8', 'O1', 'I1'], 'M2': ['M1', 'M3', 'O2', 'I2'], 'M3': ['M2', 'M4', 'O3', 'I3'],
-        'M4': ['M3', 'M5', 'O4', 'I4'], 'M5': ['M4', 'M6', 'O5', 'I5'], 'M6': ['M5', 'M7', 'O6', 'I6'],
-        'M7': ['M6', 'M8', 'O7', 'I7'], 'M8': ['M7', 'M1', 'O8', 'I8'], 'I1': ['I2', 'I8', 'M1'],
-        'I2': ['I1', 'I3', 'M2'], 'I3': ['I2', 'I4', 'M3'], 'I4': ['I3', 'I5', 'M4'], 'I5': ['I4', 'I6', 'M5'],
-        'I6': ['I5', 'I7', 'M6'], 'I7': ['I6', 'I8', 'M7'], 'I8': ['I7', 'I1', 'M8']
-    };
-    const MILLS = [
-        ['O1', 'O2', 'O3'], ['O3', 'O4', 'O5'], ['O5', 'O6', 'O7'], ['O7', 'O8', 'O1'], ['M1', 'M2', 'M3'],
-        ['M3', 'M4', 'M5'], ['M5', 'M6', 'M7'], ['M7', 'M8', 'M1'], ['I1', 'I2', 'I3'], ['I3', 'I4', 'I5'],
-        ['I5', 'I6', 'I7'], ['I7', 'I8', 'I1'], ['O2', 'M2', 'I2'], ['O4', 'M4', 'I4'], ['O6', 'M6', 'I6'],
-        ['O8', 'M8', 'I8'], ['O1', 'M1', 'I1'], ['O3', 'M3', 'I3'], ['O5', 'M5', 'I5'], ['O7', 'M7', 'I7']
-    ];
-    const SVG_NS = "http://www.w3.org/2000/svg";
-    const PIECE_RADIUS = 20;
-    const CLICK_RADIUS = 26;
-
-    // --- 2. AI Player Class ---
-    class AIPlayer {
-        constructor(playerNumber, searchDepth = 3) {
-            this.playerNum = playerNumber;
-            this.opponentNum = 3 - playerNumber;
-            this.searchDepth = searchDepth;
-        }
+#         # 2. 绘制玩家棋子信息
+#         p1_count, p2_count = self.get_piece_counts()
         
-        // 【核心改造】findBestMove 现在会优先处理战术，再进行战略评估
-        findBestMove(game) {
-            const { board, phase, piecesToPlace, gameState } = game;
-
-            if (gameState === "remove") {
-                return this._findBestRemoval(board);
-            }
-
-            // --- 新增逻辑 1: 检查AI是否能一步成三 (进攻) ---
-            const winningMove = this._findImmediateMillMove(board, this.playerNum, phase);
-            if (winningMove) {
-                console.log("AI策略: 发现可立即成三的走法", winningMove);
-                return winningMove;
-            }
-
-            // --- 新增逻辑 2: 检查对手是否能一步成三，并进行阻挡 (防守) ---
-            const blockingMoveData = this._findImmediateMillMove(board, this.opponentNum, phase);
-            if (blockingMoveData) {
-                const spotToBlock = blockingMoveData.action === 'place' ? blockingMoveData.pos : blockingMoveData.to;
-                
-                // 放置阶段：直接占据该位置
-                if (phase === 1) {
-                    console.log("AI策略: 发现对手即将成三，进行阻挡", spotToBlock);
-                    return { action: 'place', pos: spotToBlock };
-                } 
-                // 移动阶段：找到能移动到该位置的棋子
-                else if (phase === 2) {
-                    for (const neighbor of ADJACENCY[spotToBlock]) {
-                        if (board[neighbor] === this.playerNum) {
-                            console.log(`AI策略: 发现对手即将成三，从 ${neighbor} 移动到 ${spotToBlock} 进行阻挡`);
-                            return { action: 'move', from: neighbor, to: spotToBlock };
-                        }
-                    }
-                }
-            }
-
-            // --- 如果没有紧急情况，执行原有的Minimax算法进行长远规划 ---
-            console.log("AI策略: 无紧急情况，使用Minimax算法进行评估");
-            const [score, bestMove] = this.minimax(board, this.searchDepth, -Infinity, Infinity, true, phase, piecesToPlace);
-            return bestMove;
-        }
-
-        // 【新增辅助方法】查找能一步成三的走法
-        _findImmediateMillMove(board, player, phase) {
-            // 放置阶段
-            if (phase === 1) {
-                const emptySpots = POSITIONS.filter(p => board[p] === 0);
-                for (const pos of emptySpots) {
-                    const tempBoard = { ...board };
-                    tempBoard[pos] = player;
-                    if (this._checkMill(tempBoard, pos, player)) {
-                        return { action: 'place', pos: pos };
-                    }
-                }
-            } 
-            // 移动阶段
-            else {
-                const playerPieces = POSITIONS.filter(p => board[p] === player);
-                for (const fromPos of playerPieces) {
-                    for (const toPos of ADJACENCY[fromPos]) {
-                        if (board[toPos] === 0) {
-                            const tempBoard = { ...board };
-                            tempBoard[fromPos] = 0;
-                            tempBoard[toPos] = player;
-                            if (this._checkMill(tempBoard, toPos, player)) {
-                                return { action: 'move', from: fromPos, to: toPos };
-                            }
-                        }
-                    }
-                }
-            }
-            return null; // 没找到
-        }
-
-        _findBestRemoval(board) {
-            const opponentPieces = POSITIONS.filter(p => board[p] === this.opponentNum);
-            let possibleRemovals = opponentPieces.filter(p => !this._isPieceInMill(board, p));
-            if (possibleRemovals.length === 0) {
-                possibleRemovals = opponentPieces;
-            }
-            if (possibleRemovals.length === 0) return null;
-            // 简单策略：随机移除一个。可以优化为移除能破坏对方潜在三连的棋子。
-            return { action: 'remove', pos: possibleRemovals[Math.floor(Math.random() * possibleRemovals.length)] };
-        }
-
-        minimax(board, depth, alpha, beta, isMaximizing, phase, piecesToPlace) {
-            if (depth === 0 || this._isGameOver(board, phase)) {
-                return [this.evaluateBoard(board), null];
-            }
-            const possibleMoves = this._getAllPossibleMoves(board, isMaximizing ? this.playerNum : this.opponentNum, phase, piecesToPlace);
-            let bestMove = possibleMoves.length > 0 ? possibleMoves[0] : null;
-
-            if (isMaximizing) {
-                let maxEval = -Infinity;
-                for (const move of possibleMoves) {
-                    const [newBoard, newPhase, newPiecesToPlace] = this._makeMove(board, move, this.playerNum, phase, piecesToPlace);
-                    const [evaluation] = this.minimax(newBoard, depth - 1, alpha, beta, false, newPhase, newPiecesToPlace);
-                    if (evaluation > maxEval) {
-                        maxEval = evaluation;
-                        bestMove = move;
-                    }
-                    alpha = Math.max(alpha, evaluation);
-                    if (beta <= alpha) break;
-                }
-                return [maxEval, bestMove];
-            } else {
-                let minEval = Infinity;
-                for (const move of possibleMoves) {
-                    const [newBoard, newPhase, newPiecesToPlace] = this._makeMove(board, move, this.opponentNum, phase, piecesToPlace);
-                    const [evaluation] = this.minimax(newBoard, depth - 1, alpha, beta, true, newPhase, newPiecesToPlace);
-                    if (evaluation < minEval) {
-                        minEval = evaluation;
-                        bestMove = move;
-                    }
-                    beta = Math.min(beta, evaluation);
-                    if (beta <= alpha) break;
-                }
-                return [minEval, bestMove];
-            }
-        }
+#         # 玩家1信息 (左对齐)
+#         p1_info = f"白方棋子: {p1_count}"
+#         p1_surf = FONT_INFO_CN.render(p1_info, True, COLOR_TEXT)
+#         p1_rect = p1_surf.get_rect(midleft=(25, 710))
+#         screen.blit(p1_surf, p1_rect)
         
-        evaluateBoard(board) {
-            const aiPieces = POSITIONS.filter(p => board[p] === this.playerNum).length;
-            const opponentPieces = POSITIONS.filter(p => board[p] === this.opponentNum).length;
-            if (opponentPieces < 3) return 10000;
-            if (aiPieces < 3) return -10000;
-            const aiMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.playerNum)).length;
-            const opponentMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.opponentNum)).length;
-            return (aiPieces - opponentPieces) * 10 + (aiMills - opponentMills) * 25;
-        }
+#         # 玩家2信息 (右对齐)
+#         p2_info = f"黑方棋子: {p2_count}"
+#         p2_surf = FONT_INFO_CN.render(p2_info, True, COLOR_TEXT)
+#         p2_rect = p2_surf.get_rect(midright=(SCREEN_WIDTH - 25, 710))
+#         screen.blit(p2_surf, p2_rect)
 
-        _getAllPossibleMoves(board, player, phase, piecesToPlace) {
-            const moves = [];
-            if (phase === 1) {
-                if (piecesToPlace[player] > 0) {
-                    POSITIONS.filter(p => board[p] === 0).forEach(pos => moves.push({ action: 'place', pos }));
-                }
-            } else {
-                const playerPieces = POSITIONS.filter(p => board[p] === player);
-                playerPieces.forEach(pos => {
-                    ADJACENCY[pos].filter(n => board[n] === 0).forEach(n => moves.push({ action: 'move', from: pos, to: n }));
-                });
-            }
-            return moves;
-        }
+#     def run(self):
+#         while True:
+#             for event in pygame.event.get():
+#                 if event.type == pygame.QUIT:
+#                     pygame.quit()
+#                     sys.exit()
+#                 if event.type == pygame.MOUSEBUTTONDOWN and self.game_state != "game_over":
+#                     self.handle_click(self.get_pos_from_mouse(event.pos))
+#                 if event.type == pygame.KEYDOWN and event.key == pygame.K_r and self.game_state == "game_over":
+#                     self.__init__()
+#             self.draw_board()
+#             self.draw_pieces()
+#             self.draw_status_panel()
+#             pygame.display.flip()
+#             self.clock.tick(30)
 
-        _makeMove(board, move, player, phase, piecesToPlace) {
-            const newBoard = { ...board };
-            const newPiecesToPlace = { ...piecesToPlace };
-            if (move.action === 'place') {
-                newBoard[move.pos] = player;
-                newPiecesToPlace[player]--;
-            } else if (move.action === 'move') {
-                newBoard[move.from] = 0;
-                newBoard[move.to] = player;
-            }
-            const posMovedTo = move.pos || move.to;
-            if (this._checkMill(newBoard, posMovedTo, player)) {
-                const opponentNum = 3 - player;
-                const opponentPieces = POSITIONS.filter(p => newBoard[p] === opponentNum);
-                let removable = opponentPieces.filter(p => !this._isPieceInMill(newBoard, p));
-                if (removable.length === 0) removable = opponentPieces;
-                if (removable.length > 0) newBoard[removable[0]] = 0;
-            }
-            const newPhase = (newPiecesToPlace[1] === 0 && newPiecesToPlace[2] === 0) ? 2 : 1;
-            return [newBoard, newPhase, newPiecesToPlace];
-        }
 
-        _isPieceInMill(board, pos) {
-            const player = board[pos];
-            if (player === 0) return false;
-            return MILLS.some(mill => mill.includes(pos) && mill.every(p => board[p] === player));
-        }
+# if __name__ == '__main__':
+#     game = Game()
+#     game.run()
+import pygame
+import sys
+import math
+import os
+import random
+import copy
+from collections import namedtuple
+
+# --- 0. 初始化和常量 (几乎不变) ---
+
+# Pygame 初始化
+pygame.init()
+pygame.font.init()
+
+# 屏幕设置
+SCREEN_WIDTH = 640
+SCREEN_HEIGHT = 740
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("搁彡 (AI版)")
+
+# 颜色
+COLOR_BOARD = (210, 180, 140)
+COLOR_BG = (245, 245, 220)
+COLOR_LINE = (0, 0, 0)
+COLOR_PLAYER1 = (255, 255, 255)
+COLOR_PLAYER2 = (0, 0, 0)
+COLOR_HIGHLIGHT = (255, 0, 0)
+COLOR_TEXT = (50, 50, 50)
+COLOR_BUTTON = (139, 69, 19)
+COLOR_BUTTON_HOVER = (160, 82, 45)
+COLOR_BUTTON_TEXT = (255, 255, 255)
+
+# 字体处理
+FONT_CN_PATH = "simhei.ttf"
+if sys.platform == "win32":
+    font_path_system = os.path.join(os.environ.get("SystemRoot", "C:/Windows"), "Fonts", FONT_CN_PATH)
+    if os.path.exists(font_path_system):
+        FONT_CN_PATH = font_path_system
+
+try:
+    FONT_LARGE_CN = pygame.font.Font(FONT_CN_PATH, 40)
+    FONT_STATUS_CN = pygame.font.Font(FONT_CN_PATH, 26)
+    FONT_INFO_CN = pygame.font.Font(FONT_CN_PATH, 20)
+except FileNotFoundError:
+    print(f"错误：中文字体 '{FONT_CN_PATH}' 未找到！将使用备用字体。")
+    FONT_LARGE_CN = pygame.font.SysFont('Arial', 40)
+    FONT_STATUS_CN = pygame.font.SysFont('Arial', 30)
+    FONT_INFO_CN = pygame.font.SysFont('Arial', 24)
+
+# 游戏常量
+PIECE_RADIUS = 16
+CLICK_RADIUS = 25
+
+# 游戏规则数据结构 (不变)
+POSITIONS = [
+    'O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
+    'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8',
+]
+COORDS = {
+    'O1': (70, 70), 'O2': (320, 70), 'O3': (570, 70), 'O4': (570, 320), 'O5': (570, 570), 'O6': (320, 570),
+    'O7': (70, 570), 'O8': (70, 320), 'M1': (170, 170), 'M2': (320, 170), 'M3': (470, 170), 'M4': (470, 320),
+    'M5': (470, 470), 'M6': (320, 470), 'M7': (170, 470), 'M8': (170, 320), 'I1': (250, 250), 'I2': (320, 250),
+    'I3': (390, 250), 'I4': (390, 320), 'I5': (390, 390), 'I6': (320, 390), 'I7': (250, 390), 'I8': (250, 320),
+}
+ADJACENCY = {
+    'O1': ['O2', 'O8', 'M1'], 'O2': ['O1', 'O3', 'M2'], 'O3': ['O2', 'O4', 'M3'], 'O4': ['O3', 'O5', 'M4'],
+    'O5': ['O4', 'O6', 'M5'], 'O6': ['O5', 'O7', 'M6'], 'O7': ['O6', 'O8', 'M7'], 'O8': ['O7', 'O1', 'M8'],
+    'M1': ['M2', 'M8', 'O1', 'I1'], 'M2': ['M1', 'M3', 'O2', 'I2'], 'M3': ['M2', 'M4', 'O3', 'I3'],
+    'M4': ['M3', 'M5', 'O4', 'I4'], 'M5': ['M4', 'M6', 'O5', 'I5'], 'M6': ['M5', 'M7', 'O6', 'I6'],
+    'M7': ['M6', 'M8', 'O7', 'I7'], 'M8': ['M7', 'M1', 'O8', 'I8'], 'I1': ['I2', 'I8', 'M1'],
+    'I2': ['I1', 'I3', 'M2'], 'I3': ['I2', 'I4', 'M3'], 'I4': ['I3', 'I5', 'M4'], 'I5': ['I4', 'I6', 'M5'],
+    'I6': ['I5', 'I7', 'M6'], 'I7': ['I6', 'I8', 'M7'], 'I8': ['I7', 'I1', 'M8']
+}
+MILLS = [
+    ['O1', 'O2', 'O3'], ['O3', 'O4', 'O5'], ['O5', 'O6', 'O7'], ['O7', 'O8', 'O1'], ['M1', 'M2', 'M3'],
+    ['M3', 'M4', 'M5'], ['M5', 'M6', 'M7'], ['M7', 'M8', 'M1'], ['I1', 'I2', 'I3'], ['I3', 'I4', 'I5'],
+    ['I5', 'I6', 'I7'], ['I7', 'I8', 'I1'], ['O2', 'M2', 'I2'], ['O4', 'M4', 'I4'], ['O6', 'M6', 'I6'],
+    ['O8', 'M8', 'I8'], ['O1', 'M1', 'I1'], ['O3', 'M3', 'I3'], ['O5', 'M5', 'I5'], ['O7', 'M7', 'I7']
+]
+
+# --- 1. 【新增】AI 玩家类 (AI Player Class) ---
+class AIPlayer:
+    """封装AI决策逻辑的类，与游戏显示分离。"""
+    def __init__(self, player_num, search_depth=3):
+        self.player_num = player_num
+        self.opponent_num = 3 - player_num
+        self.search_depth = search_depth
+
+    def find_best_move(self, game):
+        """AI决策的入口点，返回一个包含最佳走法的字典。"""
+        board_copy = game.board.copy()
+        pieces_to_place_copy = game.pieces_to_place.copy()
+
+        # 如果AI需要移除棋子
+        if game.game_state == "remove":
+            return self._find_best_removal(board_copy)
+
+        # 否则，使用minimax寻找最佳放置或移动
+        _, best_move = self.minimax(
+            board_copy, self.search_depth, float('-inf'), float('inf'), True,
+            game.phase, pieces_to_place_copy
+        )
+        return best_move
+
+    def _find_best_removal(self, board):
+        """找到移除哪个子价值最高"""
+        possible_removals = [
+            pos for pos, player in board.items()
+            if player == self.opponent_num and not self._is_in_a_mill(board, pos, self.opponent_num)
+        ]
+        if not possible_removals: # 如果所有对手棋子都在磨坊里，则无法移除
+            return None
         
-        _checkMill(board, pos, player) {
-            return MILLS.some(mill => mill.includes(pos) && mill.every(p => board[p] === player));
-        }
+        # 策略：简单地移除第一个能移除的。可以扩展为更复杂的逻辑。
+        # 例如：优先移除能破坏对方潜在磨坊的棋子。
+        return {'action': 'remove', 'pos': random.choice(possible_removals)}
 
-        _isGameOver(board, phase) {
-            if (phase < 2) return false;
-            const p1Count = POSITIONS.filter(p => board[p] === 1).length;
-            const p2Count = POSITIONS.filter(p => board[p] === 2).length;
-            return p1Count < 3 || p2Count < 3;
-        }
-    }
+    def minimax(self, board, depth, alpha, beta, is_maximizing, phase, pieces_to_place):
+        if depth == 0 or self._is_game_over(board, phase):
+            return self.evaluate_board(board), None
 
-    // --- 3. Game Class (其余部分与上一版相同) ---
-    class Game {
-        constructor(svgElement, UIElements, gameMode) {
-            this.svg = svgElement;
-            this.ui = UIElements;
-            this.gameMode = gameMode;
-            this.ai = gameMode === 'pve' ? new AIPlayer(2) : null;
-            this.gamePaused = false; // <-- NEW: Game pause state
-            this.initialize();
-        }
-
-        initialize() {
-            this.board = {};
-            POSITIONS.forEach(pos => this.board[pos] = 0);
-            this.phase = 1;
-            this.turn = 1;
-            this.piecesToPlace = { 1: 12, 2: 12 };
-            this.gameState = "place";
-            this.selectedPiecePos = null;
-            this.drawBoard();
-            this.updateUI();
-            this.ui.restartButton.style.display = 'none';
-        }
-
-        drawBoard() {
-            this.svg.innerHTML = '';
-            const bg = document.createElementNS(SVG_NS, 'rect');
-            bg.setAttribute('width', 640);
-            bg.setAttribute('height', 640);
-            bg.setAttribute('class', 'board-bg');
-            this.svg.appendChild(bg);
-            const drawnLines = new Set();
-            POSITIONS.forEach(pos => {
-                ADJACENCY[pos].forEach(neighbor => {
-                    const lineId = [pos, neighbor].sort().join('-');
-                    if (!drawnLines.has(lineId)) {
-                        const line = document.createElementNS(SVG_NS, 'line');
-                        line.setAttribute('x1', COORDS[pos].x);
-                        line.setAttribute('y1', COORDS[pos].y);
-                        line.setAttribute('x2', COORDS[neighbor].x);
-                        line.setAttribute('y2', COORDS[neighbor].y);
-                        line.setAttribute('class', 'board-line');
-                        this.svg.appendChild(line);
-                        drawnLines.add(lineId);
-                    }
-                });
-            });
-            POSITIONS.forEach(pos => {
-                const group = document.createElementNS(SVG_NS, 'g');
-                group.setAttribute('id', `group-${pos}`);
-                this.svg.appendChild(group);
-                const point = document.createElementNS(SVG_NS, 'circle');
-                point.setAttribute('cx', COORDS[pos].x);
-                point.setAttribute('cy', COORDS[pos].y);
-                point.setAttribute('r', `${CLICK_RADIUS}`);
-                point.setAttribute('class', 'board-point');
-                const handleInteraction = (event) => {
-                    event.preventDefault();
-                    if (this.gameMode === 'pve' && this.turn === this.ai.playerNum) return;
-                    this.handleClick(pos);
-                };
-                point.addEventListener('mousedown', handleInteraction);
-                point.addEventListener('touchstart', handleInteraction, { passive: false });
-                group.appendChild(point);
-            });
-        }
+        possible_moves = self._get_all_possible_moves(board, is_maximizing, phase, pieces_to_place)
         
-        updateUI() {
-            POSITIONS.forEach(pos => {
-                const group = document.getElementById(`group-${pos}`);
-                const oldVisuals = group.querySelectorAll('.piece, .piece-blocked, .highlight-selected, .highlight-valid');
-                oldVisuals.forEach(v => v.remove());
-                const val = this.board[pos];
-                if (val === 1 || val === 2) {
-                    const piece = document.createElementNS(SVG_NS, 'circle');
-                    piece.setAttribute('cx', COORDS[pos].x);
-                    piece.setAttribute('cy', COORDS[pos].y);
-                    piece.setAttribute('r', `${PIECE_RADIUS}`);
-                    piece.setAttribute('class', `piece piece-p${val}`);
-                    group.appendChild(piece);
-                } 
-                else if (val === -1) {
-                    const cross1 = document.createElementNS(SVG_NS, 'line');
-                    const cross2 = document.createElementNS(SVG_NS, 'line');
-                    const coord = COORDS[pos];
-                    const size = PIECE_RADIUS * 0.7;
-                    cross1.setAttribute('x1', coord.x - size);
-                    cross1.setAttribute('y1', coord.y - size);
-                    cross1.setAttribute('x2', coord.x + size);
-                    cross1.setAttribute('y2', coord.y + size);
-                    cross2.setAttribute('x1', coord.x + size);
-                    cross2.setAttribute('y1', coord.y - size);
-                    cross2.setAttribute('x2', coord.x - size);
-                    cross2.setAttribute('y2', coord.y + size);
-                    cross1.setAttribute('class', 'piece-blocked');
-                    cross2.setAttribute('class', 'piece-blocked');
-                    group.appendChild(cross1);
-                    group.appendChild(cross2);
-                }
-            });
-            if (this.selectedPiecePos) {
-                const group = document.getElementById(`group-${this.selectedPiecePos}`);
-                const highlight = document.createElementNS(SVG_NS, 'circle');
-                highlight.setAttribute('cx', COORDS[this.selectedPiecePos].x);
-                highlight.setAttribute('cy', COORDS[this.selectedPiecePos].y);
-                highlight.setAttribute('r', `${CLICK_RADIUS - 2}`);
-                highlight.setAttribute('class', 'highlight-selected');
-                group.appendChild(highlight);
-                ADJACENCY[this.selectedPiecePos].forEach(neighbor => {
-                    if (this.board[neighbor] === 0) {
-                        const validMove = document.createElementNS(SVG_NS, 'circle');
-                        validMove.setAttribute('cx', COORDS[neighbor].x);
-                        validMove.setAttribute('cy', COORDS[neighbor].y);
-                        validMove.setAttribute('r', '15');
-                        validMove.setAttribute('class', 'highlight-valid');
-                        document.getElementById(`group-${neighbor}`).appendChild(validMove);
-                    }
-                });
-            }
-            this.updateMessage();
-            const [p1Count, p2Count] = this.getPieceCounts();
-            if (this.phase === 1) {
-                this.ui.p1Info.textContent = `待放: ${this.piecesToPlace[1]}`;
-                this.ui.p2Info.textContent = `待放: ${this.piecesToPlace[2]}`;
-            } else {
-                this.ui.p1Info.textContent = `棋子: ${p1Count}`;
-                this.ui.p2Info.textContent = `棋子: ${p2Count}`;
-            }
-            if (this.gameState === 'game_over') {
-                this.ui.restartButton.style.display = 'block';
-            }
-        }
+        best_move = random.choice(possible_moves) if possible_moves else None
         
-        updateMessage(text = null, isError = false) {
-            let msg = text;
-            if (!msg) {
-                const p1Name = this.gameMode === 'pve' ? "您" : "白方";
-                const p2Name = this.gameMode === 'pve' ? "电脑" : "黑方";
-                const playerName = this.turn === 1 ? p1Name : p2Name;
-                switch (this.gameState) {
-                    case "place": msg = `${playerName}回合: 请放置棋子`; break;
-                    case "remove": msg = `${playerName}成三! 请移除对方棋子`; break;
-                    case "move_select": msg = `${playerName}回合: 请选择棋子移动`; break;
-                    case "move_place": msg = `${playerName}回合: 请选择目标位置`; break;
-                    case "game_over":
-                        const [p1c, p2c] = this.getPieceCounts();
-                        const winner = p2c < 3 ? p1Name : (p1c < 3 ? p2Name : (this.turn === 1 ? p2Name : p1Name));
-                        msg = `游戏结束! ${winner} 胜利!`;
-                        if (p1c < 3 || p2c < 3) {
-                             msg = `游戏结束! ${winner} 胜利!`;
-                        } else {
-                             msg = `被困住! ${winner} 胜利!`;
-                        }
-                        break;
-                }
-            }
-            this.ui.message.textContent = msg;
-            this.ui.message.classList.toggle('error-message', isError);
-            if(isError) setTimeout(() => this.ui.message.classList.remove('error-message'), 500);
-        }
+        if is_maximizing:
+            max_eval = float('-inf')
+            for move in possible_moves:
+                new_board, new_phase, new_pieces_to_place = self._make_move(board, move, self.player_num, phase, pieces_to_place)
+                evaluation, _ = self.minimax(new_board, depth - 1, alpha, beta, False, new_phase, new_pieces_to_place)
+                if evaluation > max_eval:
+                    max_eval = evaluation
+                    best_move = move
+                alpha = max(alpha, evaluation)
+                if beta <= alpha:
+                    break
+            return max_eval, best_move
+        else: # Minimizing
+            min_eval = float('inf')
+            for move in possible_moves:
+                new_board, new_phase, new_pieces_to_place = self._make_move(board, move, self.opponent_num, phase, pieces_to_place)
+                evaluation, _ = self.minimax(new_board, depth - 1, alpha, beta, True, new_phase, new_pieces_to_place)
+                if evaluation < min_eval:
+                    min_eval = evaluation
+                    best_move = move
+                beta = min(beta, evaluation)
+                if beta <= alpha:
+                    break
+            return min_eval, best_move
+
+    def evaluate_board(self, board):
+        """启发式评估函数，评估棋盘局势分数。"""
+        ai_pieces = sum(1 for p in board.values() if p == self.player_num)
+        opponent_pieces = sum(1 for p in board.values() if p == self.opponent_num)
+
+        if opponent_pieces < 3: return 1000  # AI赢了
+        if ai_pieces < 3: return -1000 # AI输了
+
+        ai_mills = sum(1 for mill in MILLS if all(board.get(pos) == self.player_num for pos in mill))
+        opponent_mills = sum(1 for mill in MILLS if all(board.get(pos) == self.opponent_num for pos in mill))
         
-        switchTurn() {
-            this.turn = 3 - this.turn;
-            if (this.phase === 1 && this.piecesToPlace[1] === 0 && this.piecesToPlace[2] === 0) {
-                this.phase = 2;
-                POSITIONS.forEach(pos => { if (this.board[pos] === -1) this.board[pos] = 0; });
-                this.turn = 2; 
-                this.gameState = "move_select";
-            } else if (this.phase === 2) {
-                if (this.checkWinCondition()) return;
-                if (this.checkStalemate()) {
-                    this.gameState = "game_over";
-                    this.updateMessage();
-                    this.updateUI();
-                    return;
-                }
-                this.gameState = "move_select";
-            } else {
-                this.gameState = "place";
-            }
-            this.selectedPiecePos = null;
-            this.updateUI();
-            this.triggerAITurn();
-        }
+        score = 0
+        score += (ai_pieces - opponent_pieces) * 10
+        score += (ai_mills - opponent_mills) * 25
+        # 还可以增加对棋子机动性(mobility)的评估
+        return score
 
-        handleClick(pos) {
-            if (this.gamePaused) return; // <-- MODIFIED: Check if game is paused
-            const handlers = {
-                "place": this.handlePlace, "remove": this.handleRemove,
-                "move_select": this.handleMoveSelect, "move_place": this.handleMovePlace,
-            };
-            if (handlers[this.gameState]) {
-                handlers[this.gameState].call(this, pos);
-            }
-        }
+    def _get_all_possible_moves(self, board, is_maximizing, phase, pieces_to_place):
+        player = self.player_num if is_maximizing else self.opponent_num
+        moves = []
+        if phase == 1:
+            if pieces_to_place[player] > 0:
+                empty_spots = [pos for pos, p_val in board.items() if p_val == 0]
+                for pos in empty_spots:
+                    moves.append({'action': 'place', 'pos': pos})
+        else: # phase 2
+            player_pieces = [pos for pos, p_val in board.items() if p_val == player]
+            for pos in player_pieces:
+                for neighbor in ADJACENCY[pos]:
+                    if board[neighbor] == 0:
+                        moves.append({'action': 'move', 'from': pos, 'to': neighbor})
+        return moves
+    
+    def _make_move(self, board, move, player, phase, pieces_to_place):
+        """在虚拟棋盘上执行一步，返回新状态"""
+        new_board = board.copy()
+        new_pieces_to_place = pieces_to_place.copy()
+        
+        if move['action'] == 'place':
+            new_board[move['pos']] = player
+            new_pieces_to_place[player] -= 1
+        elif move['action'] == 'move':
+            new_board[move['from']] = 0
+            new_board[move['to']] = player
+        
+        # 如果形成磨坊，模拟移除一个对方棋子
+        pos_moved_to = move.get('pos') or move.get('to')
+        if self._check_mill(new_board, pos_moved_to, player):
+            opponent_removable = [
+                p for p, owner in new_board.items() 
+                if owner == (3 - player) and not self._is_in_a_mill(new_board, p, 3 - player)
+            ]
+            if opponent_removable:
+                # 简单策略：移除对方一个随机的非磨坊棋子
+                piece_to_remove = random.choice(opponent_removable)
+                new_board[piece_to_remove] = 0
 
-        handlePlace(pos) {
-            if (this.board[pos] !== 0) return this.updateMessage("请选择一个空位", true);
-            this.board[pos] = this.turn;
-            this.piecesToPlace[this.turn]--;
-            if (this.isMill(pos, this.turn)) {
-                if (this.hasValidCaptureTarget()) this.gameState = "remove";
-                else this.switchTurn();
-            } else this.switchTurn();
-            this.updateUI();
-        }
+        new_phase = 2 if all(p == 0 for p in new_pieces_to_place.values()) else 1
+        return new_board, new_phase, new_pieces_to_place
 
-        handleRemove(pos) {
-            const opponent = 3 - this.turn;
-            if (this.board[pos] !== opponent) return this.updateMessage("请选择对方的棋子", true);
-            if (this.isPieceInMill(pos) && this.hasValidCaptureTarget()) return this.updateMessage("不能移除已成三的棋子", true);
+    def _is_in_a_mill(self, board, pos, player):
+        for mill in MILLS:
+            if pos in mill and all(board.get(p) == player for p in mill):
+                return True
+        return False
+    
+    def _check_mill(self, board, pos, player):
+        if not pos: return False
+        return self._is_in_a_mill(board, pos, player)
+        
+    def _is_game_over(self, board, phase):
+        if phase != 2: return False
+        p1_count = sum(1 for v in board.values() if v == 1)
+        p2_count = sum(1 for v in board.values() if v == 2)
+        if p1_count < 3 or p2_count < 3: return True
+        return False
+
+# --- 2. 游戏主类 (Main Game Class) ---
+class Game:
+    """封装游戏主逻辑和 Pygame 显示"""
+    def __init__(self, game_mode='pvp'):
+        self.board = {pos: 0 for pos in POSITIONS}
+        self.phase = 1
+        self.turn = 1
+        self.pieces_to_place = {1: 12, 2: 12}
+        self.game_state = "place"  # place, remove, move_select, move_place, game_over
+        self.selected_piece_pos = None
+        self.message = ""
+        self.newly_formed_mill = []
+        self.clock = pygame.time.Clock()
+
+        # 【新增】游戏模式和AI玩家
+        self.game_mode = game_mode
+        self.ai_player = AIPlayer(player_num=2) if self.game_mode == 'pve' else None
+        
+        self.update_message()
+
+    # ... (get_piece_counts 和 update_message 保持基本不变, 但提示信息可微调)
+    def get_piece_counts(self):
+        p1_count = sum(1 for v in self.board.values() if v == 1)
+        p2_count = sum(1 for v in self.board.values() if v == 2)
+        return p1_count, p2_count
+
+    def update_message(self):
+        p1_name = "您" if self.game_mode == 'pve' else "白方 (玩家1)"
+        p2_name = "电脑" if self.game_mode == 'pve' else "黑方 (玩家2)"
+        player_name = p1_name if self.turn == 1 else p2_name
+
+        if self.game_state == "place":
+            self.message = f"轮到{player_name}: 请放置棋子。剩余: {self.pieces_to_place[self.turn]}"
+        elif self.game_state == "remove":
+            self.message = f"{player_name}三连已成！请选择一个对方棋子进行“薅”子！"
+        elif self.game_state == "move_select":
+            self.message = f"轮到{player_name}: 请选择要移动的己方棋子。"
+        elif self.game_state == "move_place":
+            self.message = f"轮到{player_name}: 请选择一个相邻的空位。"
+        elif self.game_state == "game_over":
+            winner_name = p1_name if self.turn == 1 else p2_name # 胜利者是当前回合的玩家
+            self.message = f"游戏结束！{winner_name}胜利！按 'R' 重新开始。"
+
+    # 游戏逻辑函数基本不变
+    def switch_turn(self):
+        self.turn = 3 - self.turn
+        self.newly_formed_mill = []
+        if self.phase == 1 and all(p == 0 for p in self.pieces_to_place.values()):
+            self.phase = 2
+            for pos, val in self.board.items():
+                if val == -1: self.board[pos] = 0
+            self.turn = 2 # Phase 2 Player 2 (or AI) starts
+            self.game_state = "move_select"
+        elif self.phase == 2:
+             if self.check_win_condition(): return
+             if self.check_stalemate():
+                 winner_name = "白方" if self.turn == 2 else "黑方"
+                 self.game_state = "game_over"
+                 self.message = f"游戏结束！{winner_name}胜利 (对手已无路可走)！按 'R' 重新开始。"
+                 return
+        self.update_message()
+
+    def get_pos_from_mouse(self, mouse_pos):
+        for pos_id, coord in COORDS.items():
+            if math.hypot(mouse_pos[0] - coord[0], mouse_pos[1] - coord[1]) <= CLICK_RADIUS:
+                return pos_id
+        return None
+
+    def check_mill(self, pos, player):
+        for mill in MILLS:
+            if pos in mill and all(self.board.get(p) == player for p in mill):
+                return True
+        return False
+
+    def is_in_a_mill(self, pos):
+        player = self.board[pos]
+        if player == 0: return False
+        for mill in MILLS:
+            if pos in mill and all(self.board.get(p) == player for p in mill):
+                return True
+        return False
+
+    def check_win_condition(self):
+        if self.phase != 2: return False
+        p1_count, p2_count = self.get_piece_counts()
+        if p1_count < 3 or p2_count < 3:
+            self.game_state = "game_over"
+            self.update_message()
+            return True
+        return False
+    
+    def check_stalemate(self):
+        if self.phase != 2: return False
+        for pos, player in self.board.items():
+            if player == self.turn:
+                for neighbor in ADJACENCY[pos]:
+                    if self.board[neighbor] == 0:
+                        return False
+        return True
+
+    def has_valid_capture_target(self):
+        opponent = 3 - self.turn
+        non_mill_pieces = [pos for pos, p in self.board.items() if p == opponent and not self.is_in_a_mill(pos)]
+        return len(non_mill_pieces) > 0
+
+    def handle_click(self, pos_id):
+        # AI回合中，忽略玩家点击
+        if self.game_mode == 'pve' and self.turn == self.ai_player.player_num:
+            return
             
-            this.board[pos] = this.phase === 1 ? -1 : 0;
-
-            if (this.checkWinCondition()) {
-                this.updateUI();
-                return;
-            };
-            this.gameState = this.phase === 1 ? "place" : "move_select";
-            this.switchTurn();
-        }
-
-        handleMoveSelect(pos) {
-            if (this.board[pos] !== this.turn) return this.updateMessage("请选择自己的棋子", true);
-            this.selectedPiecePos = pos;
-            this.gameState = "move_place";
-            this.updateUI();
-        }
-
-        handleMovePlace(pos) {
-            if (this.board[pos] === this.turn) return this.handleMoveSelect(pos);
-            if (this.board[pos] !== 0 || !ADJACENCY[this.selectedPiecePos].includes(pos)) {
-                this.selectedPiecePos = null;
-                this.gameState = "move_select";
-                return this.updateMessage("无效移动", true);
-            }
-            this.board[this.selectedPiecePos] = 0;
-            this.board[pos] = this.turn;
-            this.selectedPiecePos = null;
-            if (this.isMill(pos, this.turn)) {
-                if (this.hasValidCaptureTarget()) this.gameState = "remove";
-                else this.switchTurn();
-            } else this.switchTurn();
-            this.updateUI();
-        }
+        if not pos_id: return
         
-        getPieceCounts() {
-            let p1 = 0, p2 = 0;
-            POSITIONS.forEach(pos => {
-                if (this.board[pos] === 1) p1++;
-                else if (this.board[pos] === 2) p2++;
-            });
-            return [p1, p2];
-        }
-
-        isMill(pos, player) { return MILLS.some(mill => mill.includes(pos) && mill.every(p => this.board[p] === player)); }
+        current_player = self.turn
         
-        isPieceInMill(pos) {
-            const player = this.board[pos];
-            if (player < 1) return false;
-            return this.isMill(pos, player);
-        }
+        if self.game_state == "place":
+            if self.board[pos_id] == 0:
+                self.board[pos_id] = current_player
+                self.pieces_to_place[current_player] -= 1
+                if self.check_mill(pos_id, current_player):
+                    if self.has_valid_capture_target(): self.game_state = "remove"
+                    else: self.switch_turn()
+                else: self.switch_turn()
         
-        hasValidCaptureTarget() {
-            const opponent = 3 - this.turn;
-            const opponentPieces = POSITIONS.filter(p => this.board[p] === opponent);
-            if (opponentPieces.length === 0) return false;
-            return opponentPieces.some(p => !this.isPieceInMill(p));
-        }
-
-        checkWinCondition() {
-            if (this.phase < 2) return false;
-            const [p1Count, p2Count] = this.getPieceCounts();
-            if (p1Count < 3 || p2Count < 3) {
-                this.gameState = "game_over";
-                this.updateMessage();
-                return true;
-            }
-            return false;
-        }
+        elif self.game_state == "remove":
+            opponent = 3 - current_player
+            if self.board.get(pos_id) == opponent and not self.is_in_a_mill(pos_id):
+                self.board[pos_id] = -1 if self.phase == 1 else 0
+                if not self.check_win_condition():
+                     self.game_state = "place" if self.phase == 1 else "move_select"
+                     self.switch_turn()
         
-        checkStalemate() {
-            if (this.phase !== 2) return false;
-            return !POSITIONS.some(pos => this.board[pos] === this.turn && ADJACENCY[pos].some(n => this.board[n] === 0));
-        }
+        elif self.game_state == "move_select":
+            if self.board[pos_id] == current_player:
+                self.selected_piece_pos = pos_id
+                self.game_state = "move_place"
         
-        triggerAITurn() {
-            if (this.gameMode !== 'pve' || this.turn !== this.ai.playerNum || this.gameState === 'game_over' || this.gamePaused) { // <-- MODIFIED
-                return;
-            }
+        elif self.game_state == "move_place":
+            if self.board[pos_id] == current_player:
+                self.selected_piece_pos = pos_id # 允许重新选择
+            elif self.board[pos_id] == 0 and pos_id in ADJACENCY.get(self.selected_piece_pos, []):
+                self.board[self.selected_piece_pos] = 0
+                self.board[pos_id] = current_player
+                if self.check_mill(pos_id, current_player):
+                    if self.has_valid_capture_target(): self.game_state = "remove"
+                    else: self.switch_turn()
+                else: self.switch_turn()
+                self.selected_piece_pos = None
+            else: # 点击无效位置，返回选择棋子状态
+                 self.selected_piece_pos = None
+                 self.game_state = "move_select"
+        self.update_message()
 
-            setTimeout(() => {
-                const primaryMove = this.ai.findBestMove(this);
-                if (!primaryMove) { 
-                    this.gameState = 'game_over';
-                    this.updateMessage();
-                    this.updateUI();
-                    return;
-                }
-
-                if (primaryMove.action === 'place') {
-                    this.handlePlace(primaryMove.pos);
-                } else if (primaryMove.action === 'move') {
-                    this.handleMoveSelect(primaryMove.from);
-                    this.handleMovePlace(primaryMove.to);
-                }
-                
-                if (this.gameState === 'remove') {
-                    setTimeout(() => {
-                        const removalMove = this.ai.findBestMove(this);
-                        if (removalMove) {
-                            this.handleRemove(removalMove.pos);
-                        }
-                    }, 500);
-                }
-            }, 800);
-        }
-    }
-
-    // --- 4. App Initialization ---
-    document.addEventListener('DOMContentLoaded', () => {
-        const gameMenu = document.getElementById('game-menu');
-        const gameContainer = document.getElementById('game-container');
-        const pveButton = document.getElementById('pve-button');
-        const pvpButton = document.getElementById('pvp-button');
-        const restartButton = document.getElementById('restart-button');
+    # 【新增】处理AI行动的方法
+    def handle_ai_turn(self):
+        move = self.ai_player.find_best_move(self)
         
-        // --- NEW: Modal variables ---
-        const instructionsButton = document.getElementById('instructions-button');
-        const modal = document.getElementById('instructions-modal');
-        const closeModal = document.getElementById('close-modal');
-        const rulesContent = document.getElementById('rules-content');
+        if not move: # AI无棋可走
+            return
 
-        let gameInstance = null;
+        print(f"AI decision: {move}") # 在控制台打印AI决策，便于调试
+
+        action = move['action']
+        if action == 'place':
+            pos = move['pos']
+            self.board[pos] = self.ai_player.player_num
+            self.pieces_to_place[self.ai_player.player_num] -= 1
+            if self.check_mill(pos, self.ai_player.player_num):
+                 self.game_state = "remove"
+            else:
+                 self.switch_turn()
+
+        elif action == 'move':
+            self.board[move['from']] = 0
+            self.board[move['to']] = self.ai_player.player_num
+            if self.check_mill(move['to'], self.ai_player.player_num):
+                self.game_state = "remove"
+            else:
+                self.switch_turn()
         
-        // --- NEW: Populate rules content ---
-        rulesContent.innerHTML = `
-         <h2> 搁彡 游戏规则</h2>
-        <h3>核心玩法</h3>
-        <p>这是一场紧张刺激的双人策略比拼，在24个点的棋盘上分两个阶段徐徐展开。终极目标只有一个：将对手的棋子“薅”到少于三颗，取得胜利！</p>
+        elif action == 'remove':
+            self.board[move['pos']] = -1 if self.phase == 1 else 0
+            if not self.check_win_condition():
+                self.game_state = "place" if self.phase == 1 else "move_select"
+                self.switch_turn()
         
-        <h3>第一阶段：布局阶段</h3>
-        <ul>
-            <li>玩家轮流落子，每回合在任意空点上放置一颗棋子。每位玩家手握<strong>12颗棋子</strong>。</li>
-            <li>当落子后形成一条由三颗己方棋子组成的直线，也就是<strong>“磨坊”</strong>时，你就有权“薅”走（即捕获）对手的一颗棋子。</li>
-            <li><strong>捕获规则：</strong> 你可以移除对手的任意一颗棋子，但有一个关键例外：已经连成“磨坊”的棋子是<strong>不可</strong>被捕获的。</li>
-            <li>被捕获的棋子所在的位置，在第一阶段的剩余时间里将被“封锁”，无法使用。</li>
-        </ul>
+        self.update_message()
 
-        <h3>第二阶段：移动阶段</h3>
-        <ul>
-            <li>在所有24个位置都被棋子占满或被封锁后，此阶段开始。所有被封锁的位置将恢复为空位，可以正常使用。</li>
-            <li>在第一阶段中后手的玩家，将在第二阶段率先出招。</li>
-            <li>轮到你时，将自己的一颗棋子沿着棋盘上的线条，移动到一个<strong>相邻的空位</strong>上。</li>
-            <li>如果这一步移动形成了新的“磨坊”，你就可以再次捕获对方一颗棋子，规则和第一阶段完全一样。</li>
-        </ul>
+    # 绘图函数保持不变
+    def draw_board(self):
+        screen.fill(COLOR_BG)
+        pygame.draw.rect(screen, COLOR_BOARD, (20, 20, 600, 600))
+        pygame.draw.rect(screen, COLOR_LINE, (70, 70, 500, 500), 4)
+        pygame.draw.rect(screen, COLOR_LINE, (170, 170, 300, 300), 4)
+        pygame.draw.rect(screen, COLOR_LINE, (250, 250, 140, 140), 4)
+        # 绘制所有连接线
+        lines_drawn = set()
+        for pos, neighbors in ADJACENCY.items():
+            for neighbor in neighbors:
+                line_id = tuple(sorted((pos, neighbor)))
+                if line_id not in lines_drawn:
+                    pygame.draw.line(screen, COLOR_LINE, COORDS[pos], COORDS[neighbor], 4)
+                    lines_drawn.add(line_id)
 
-        <h3>胜利与失败</h3>
-        <ul>
-            <li>当对手棋盘上的棋子数量<strong>少于三颗</strong>时，你就<strong>赢了</strong>！</li>
-            <li>如果轮到你时，你的所有棋子都被困住，<strong>无路可走</strong>（即没有任何合法移动），那么你将<strong>输掉</strong>本局游戏。</li>
-        </ul>
-        `;
+    def draw_pieces(self):
+        for pos_id, coord in COORDS.items():
+            player = self.board[pos_id]
+            if player == 1:
+                pygame.draw.circle(screen, COLOR_PLAYER1, coord, PIECE_RADIUS)
+                pygame.draw.circle(screen, COLOR_LINE, coord, PIECE_RADIUS, 2) # 加个边框更好看
+            elif player == 2:
+                pygame.draw.circle(screen, COLOR_PLAYER2, coord, PIECE_RADIUS)
+            elif player == -1:
+                pygame.draw.line(screen, COLOR_HIGHLIGHT, (coord[0]-10, coord[1]-10), (coord[0]+10, coord[1]+10), 4)
+                pygame.draw.line(screen, COLOR_HIGHLIGHT, (coord[0]+10, coord[1]-10), (coord[0]-10, coord[1]+10), 4)
+            if self.selected_piece_pos == pos_id:
+                pygame.draw.circle(screen, COLOR_HIGHLIGHT, coord, PIECE_RADIUS + 4, 4)
 
-        const startGame = (mode) => {
-            gameMenu.style.display = 'none';
-            gameContainer.style.display = 'flex';
-            instructionsButton.style.display = 'flex'; // Show instructions button
-            const svgElement = document.getElementById('board-svg');
-            const UIElements = {
-                message: document.getElementById('message'),
-                p1Info: document.getElementById('p1-info'),
-                p2Info: document.getElementById('p2-info'),
-                restartButton: restartButton
-            };
-            gameInstance = new Game(svgElement, UIElements, mode);
-            gameInstance.triggerAITurn();
-        };
+    def draw_status_panel(self):
+        pygame.draw.rect(screen, COLOR_BOARD, (0, 640, SCREEN_WIDTH, 100))
+        text_surface = FONT_STATUS_CN.render(self.message, True, COLOR_TEXT)
+        text_rect = text_surface.get_rect(center=(SCREEN_WIDTH / 2, 670))
+        screen.blit(text_surface, text_rect)
 
-        pveButton.onclick = () => startGame('pve');
-        pvpButton.onclick = () => startGame('pvp');
-        restartButton.onclick = () => {
-            gameContainer.style.display = 'none';
-            instructionsButton.style.display = 'none'; // Hide instructions button
-            gameMenu.style.display = 'block';
-            restartButton.style.display = 'none';
-            gameInstance = null;
-        };
+        p1_count, p2_count = self.get_piece_counts()
+        p1_info_text = f"白方棋子: {p1_count}" if self.phase == 2 else f"白方待放: {self.pieces_to_place[1]}"
+        p2_info_text = f"黑方棋子: {p2_count}" if self.phase == 2 else f"黑方待放: {self.pieces_to_place[2]}"
         
-        // --- NEW: Modal event listeners ---
-        instructionsButton.onclick = () => {
-            if (gameInstance) {
-                gameInstance.gamePaused = true;
-            }
-            modal.style.display = 'flex';
-        };
+        p1_surf = FONT_INFO_CN.render(p1_info_text, True, COLOR_TEXT)
+        screen.blit(p1_surf, (25, 710))
+        
+        p2_surf = FONT_INFO_CN.render(p2_info_text, True, COLOR_TEXT)
+        p2_rect = p2_surf.get_rect(topright=(SCREEN_WIDTH - 25, 710))
+        screen.blit(p2_surf, p2_rect)
 
-        closeModal.onclick = () => {
-            modal.style.display = 'none';
-            if (gameInstance) {
-                gameInstance.gamePaused = false;
-                // If it was the AI's turn, re-trigger it after a small delay
-                if (gameInstance.turn === gameInstance.ai?.playerNum) {
-                    setTimeout(() => gameInstance.triggerAITurn(), 200);
-                }
-            }
-        };
+    def run(self):
+        running = True
+        while running:
+            is_ai_turn = self.game_mode == 'pve' and self.turn == self.ai_player.player_num and self.game_state != "game_over"
 
-        window.onclick = (event) => {
-            if (event.target == modal) {
-                modal.style.display = 'none';
-                if (gameInstance) {
-                    gameInstance.gamePaused = false;
-                     if (gameInstance.turn === gameInstance.ai?.playerNum) {
-                        setTimeout(() => gameInstance.triggerAITurn(), 200);
-                    }
-                }
-            }
-        };
-    });
-    </script>
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.MOUSEBUTTONDOWN and not is_ai_turn:
+                    self.handle_click(self.get_pos_from_mouse(event.pos))
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                    # 重启功能现在需要返回到主菜单，所以这里只退出当前游戏循环
+                    running = False 
+            
+            if is_ai_turn:
+                pygame.time.wait(500) # 给AI一点思考时间，提升体验
+                self.handle_ai_turn()
 
-</body>
-</html>
+            self.draw_board()
+            self.draw_pieces()
+            self.draw_status_panel()
+            pygame.display.flip()
+            self.clock.tick(30)
+
+# --- 3. 【新增】主菜单函数和主程序入口 ---
+def main_menu():
+    """显示游戏主菜单，并返回选择的游戏模式。"""
+    button_pve = pygame.Rect(SCREEN_WIDTH/2 - 150, 250, 300, 60)
+    button_pvp = pygame.Rect(SCREEN_WIDTH/2 - 150, 350, 300, 60)
+    
+    while True:
+        screen.fill(COLOR_BG)
+        
+        title_text = FONT_LARGE_CN.render("搁彡", True, COLOR_TEXT)
+        title_rect = title_text.get_rect(center=(SCREEN_WIDTH/2, 150))
+        screen.blit(title_text, title_rect)
+
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # 绘制PVE按钮
+        pve_color = COLOR_BUTTON_HOVER if button_pve.collidepoint(mouse_pos) else COLOR_BUTTON
+        pygame.draw.rect(screen, pve_color, button_pve, border_radius=15)
+        pve_text = FONT_STATUS_CN.render("玩家 vs 电脑", True, COLOR_BUTTON_TEXT)
+        screen.blit(pve_text, pve_text.get_rect(center=button_pve.center))
+
+        # 绘制PVP按钮
+        pvp_color = COLOR_BUTTON_HOVER if button_pvp.collidepoint(mouse_pos) else COLOR_BUTTON
+        pygame.draw.rect(screen, pvp_color, button_pvp, border_radius=15)
+        pvp_text = FONT_STATUS_CN.render("玩家 vs 玩家", True, COLOR_BUTTON_TEXT)
+        screen.blit(pvp_text, pvp_text.get_rect(center=button_pvp.center))
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if button_pve.collidepoint(mouse_pos):
+                    return 'pve'
+                if button_pvp.collidepoint(mouse_pos):
+                    return 'pvp'
+        
+        pygame.display.flip()
+
+
+if __name__ == '__main__':
+    while True: # 允许游戏结束后返回主菜单
+        game_mode = main_menu()
+        game = Game(game_mode)
+        game.run()
+    # pyinstaller --name NineMensMorris --windowed --add-data "simhei.ttf;." --upx-dir "D:/software/upx/upx-5.0.1-win64" morris_game.py
