@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>九子棋 (Nine Men's Morris)</title>
+    <style>
+        /* --- 1. General & Layout Styles --- */
+        :root {
+            --color-board: #d2b48c; /* Tan */
+            --color-bg: #f5f5dc;    /* Beige */
+            --color-line: #000000;
+            --color-player1: #ffffff;
+            --color-player2: #000000;
+            --color-highlight: #ff4136; /* Red */
+            --color-valid-move: #2ecc40; /* Green */
+            --color-text: #333333;
+            --color-error: #b33a3a;
+            --board-size: 90vmin;
+        }
+
+        @media (min-width: 800px) {
+            :root {
+                --board-size: 640px;
+            }
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 防止移动端拖动 */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            padding: 10px;
+            box-sizing: border-box;
+            -webkit-user-select: none; /* Safari/Chrome */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE10+ */
+            user-select: none; /* Standard */
+        }
+
+        /* --- 2. Game Menu Styles --- */
+        #game-menu {
+            text-align: center;
+            padding: 30px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        #game-menu h1 {
+            margin-top: 0;
+            color: var(--color-text);
+        }
+
+        #game-menu .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        #game-menu button {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: white;
+            background-color: var(--color-highlight);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        
+        #game-menu button:hover {
+            background-color: #c53028;
+            transform: scale(1.05);
+        }
+
+
+        #game-container {
+            display: none; /* Initially hidden */
+            width: 100%;
+            max-width: var(--board-size);
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* --- 3. Game Board (SVG) Styles --- */
+        #board-svg {
+            width: var(--board-size);
+            height: var(--board-size);
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+        }
+
+        .board-bg { fill: var(--color-board); }
+        .board-line { stroke: var(--color-line); stroke-width: 4; stroke-linecap: round; }
+
+        /* --- 4. Pieces & Interaction Points Styles --- */
+        .board-point { fill: rgba(0,0,0,0.2); cursor: pointer; transition: r 0.2s ease, fill 0.2s ease; }
+        .piece { stroke-width: 2; stroke: rgba(0,0,0,0.3); transition: all 0.2s ease-in-out; pointer-events: none; }
+        .piece-p1 { fill: var(--color-player1); }
+        .piece-p2 { fill: var(--color-player2); }
+        .piece-blocked { stroke: var(--color-highlight); stroke-width: 3; stroke-dasharray: 4 4; animation: rotate 8s linear infinite; transform-origin: center; }
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .highlight-selected { fill: none; stroke: var(--color-highlight); stroke-width: 4; pointer-events: none; }
+        .highlight-valid { fill: var(--color-valid-move); opacity: 0.5; pointer-events: none; }
+
+        /* --- 5. Status Panel Styles --- */
+        #status-panel {
+            width: 100%;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.5);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        #message { font-size: 1.1rem; font-weight: 500; min-height: 40px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease; }
+        #message.error-message { color: var(--color-error); animation: shake 0.5s; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); } 20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        #info-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 0.9rem; }
+        .player-info { display: flex; align-items: center; gap: 8px; }
+        .info-piece { width: 20px; height: 20px; border-radius: 50%; display: inline-block; border: 2px solid rgba(0,0,0,0.3); }
+        #restart-button { display: none; margin-top: 15px; padding: 10px 20px; font-size: 1rem; font-weight: bold; color: white; background-color: var(--color-highlight); border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        #restart-button:hover { background-color: #c53028; }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-menu">
+        <h1>Nine Men's Morris</h1>
+        <div class="menu-buttons">
+            <button id="pve-button">玩家 vs 电脑</button>
+            <button id="pvp-button">玩家 vs 玩家</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <svg id="board-svg" viewBox="0 0 640 640"></svg>
+        <div id="status-panel">
+            <div id="message">Welcome!</div>
+            <div id="info-bar">
+                <div class="player-info">
+                    <span class="info-piece piece-p1"></span>
+                    <span id="p1-info"></span>
+                </div>
+                <div class="player-info">
+                    <span id="p2-info"></span>
+                    <span class="info-piece piece-p2"></span>
+                </div>
+            </div>
+            <button id="restart-button">返回菜单</button>
+        </div>
+    </div>
+
+    <script>
+    // --- 1. Game Constants & Data Structures ---
+    const POSITIONS = [
+        'O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
+        'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8',
+    ];
+    const COORDS = {
+        'O1': { x: 70, y: 70 }, 'O2': { x: 320, y: 70 }, 'O3': { x: 570, y: 70 }, 'O4': { x: 570, y: 320 }, 
+        'O5': { x: 570, y: 570 }, 'O6': { x: 320, y: 570 }, 'O7': { x: 70, y: 570 }, 'O8': { x: 70, y: 320 },
+        'M1': { x: 170, y: 170 }, 'M2': { x: 320, y: 170 }, 'M3': { x: 470, y: 170 }, 'M4': { x: 470, y: 320 },
+        'M5': { x: 470, y: 470 }, 'M6': { x: 320, y: 470 }, 'M7': { x: 170, y: 470 }, 'M8': { x: 170, y: 320 },
+        'I1': { x: 250, y: 250 }, 'I2': { x: 320, y: 250 }, 'I3': { x: 390, y: 250 }, 'I4': { x: 390, y: 320 },
+        'I5': { x: 390, y: 390 }, 'I6': { x: 320, y: 390 }, 'I7': { x: 250, y: 390 }, 'I8': { x: 250, y: 320 },
+    };
+    const ADJACENCY = {
+        'O1': ['O2', 'O8', 'M1'], 'O2': ['O1', 'O3', 'M2'], 'O3': ['O2', 'O4', 'M3'], 'O4': ['O3', 'O5', 'M4'],
+        'O5': ['O4', 'O6', 'M5'], 'O6': ['O5', 'O7', 'M6'], 'O7': ['O6', 'O8', 'M7'], 'O8': ['O7', 'O1', 'M8'],
+        'M1': ['M2', 'M8', 'O1', 'I1'], 'M2': ['M1', 'M3', 'O2', 'I2'], 'M3': ['M2', 'M4', 'O3', 'I3'],
+        'M4': ['M3', 'M5', 'O4', 'I4'], 'M5': ['M4', 'M6', 'O5', 'I5'], 'M6': ['M5', 'M7', 'O6', 'I6'],
+        'M7': ['M6', 'M8', 'O7', 'I7'], 'M8': ['M7', 'M1', 'O8', 'I8'], 'I1': ['I2', 'I8', 'M1'],
+        'I2': ['I1', 'I3', 'M2'], 'I3': ['I2', 'I4', 'M3'], 'I4': ['I3', 'I5', 'M4'], 'I5': ['I4', 'I6', 'M5'],
+        'I6': ['I5', 'I7', 'M6'], 'I7': ['I6', 'I8', 'M7'], 'I8': ['I7', 'I1', 'M8']
+    };
+    const MILLS = [
+        ['O1', 'O2', 'O3'], ['O3', 'O4', 'O5'], ['O5', 'O6', 'O7'], ['O7', 'O8', 'O1'], ['M1', 'M2', 'M3'],
+        ['M3', 'M4', 'M5'], ['M5', 'M6', 'M7'], ['M7', 'M8', 'M1'], ['I1', 'I2', 'I3'], ['I3', 'I4', 'I5'],
+        ['I5', 'I6', 'I7'], ['I7', 'I8', 'I1'], ['O2', 'M2', 'I2'], ['O4', 'M4', 'I4'], ['O6', 'M6', 'I6'],
+        ['O8', 'M8', 'I8'], ['O1', 'M1', 'I1'], ['O3', 'M3', 'I3'], ['O5', 'M5', 'I5'], ['O7', 'M7', 'I7']
+    ];
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const PIECE_RADIUS = 20;
+    const CLICK_RADIUS = 26;
+
+    // --- 2. AI Player Class ---
+    class AIPlayer {
+        constructor(playerNumber, searchDepth = 3) {
+            this.playerNum = playerNumber;
+            this.opponentNum = 3 - playerNumber;
+            this.searchDepth = searchDepth;
+        }
+
+        findBestMove(game) {
+            if (game.gameState === "remove") {
+                return this._findBestRemoval(game.board);
+            }
+            const _, bestMove = this.minimax(game.board, this.searchDepth, -Infinity, Infinity, true, game.phase, game.piecesToPlace);
+            return bestMove;
+        }
+
+        _findBestRemoval(board) {
+            const opponentPieces = POSITIONS.filter(p => board[p] === this.opponentNum);
+            let possibleRemovals = opponentPieces.filter(p => !this._isPieceInMill(board, p));
+            if (possibleRemovals.length === 0) {
+                possibleRemovals = opponentPieces;
+            }
+            if (possibleRemovals.length === 0) return null;
+            return { action: 'remove', pos: possibleRemovals[Math.floor(Math.random() * possibleRemovals.length)] };
+        }
+
+        minimax(board, depth, alpha, beta, isMaximizing, phase, piecesToPlace) {
+            if (depth === 0 || this._isGameOver(board, phase)) {
+                return [this.evaluateBoard(board), null];
+            }
+            const possibleMoves = this._getAllPossibleMoves(board, isMaximizing ? this.playerNum : this.opponentNum, phase, piecesToPlace);
+            let bestMove = possibleMoves.length > 0 ? possibleMoves[0] : null;
+
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+                for (const move of possibleMoves) {
+                    const [newBoard, newPhase, newPiecesToPlace] = this._makeMove(board, move, this.playerNum, phase, piecesToPlace);
+                    const [evaluation] = this.minimax(newBoard, depth - 1, alpha, beta, false, newPhase, newPiecesToPlace);
+                    if (evaluation > maxEval) {
+                        maxEval = evaluation;
+                        bestMove = move;
+                    }
+                    alpha = Math.max(alpha, evaluation);
+                    if (beta <= alpha) break;
+                }
+                return [maxEval, bestMove];
+            } else {
+                let minEval = Infinity;
+                for (const move of possibleMoves) {
+                    const [newBoard, newPhase, newPiecesToPlace] = this._makeMove(board, move, this.opponentNum, phase, piecesToPlace);
+                    const [evaluation] = this.minimax(newBoard, depth - 1, alpha, beta, true, newPhase, newPiecesToPlace);
+                    if (evaluation < minEval) {
+                        minEval = evaluation;
+                        bestMove = move;
+                    }
+                    beta = Math.min(beta, evaluation);
+                    if (beta <= alpha) break;
+                }
+                return [minEval, bestMove];
+            }
+        }
+        
+        evaluateBoard(board) {
+            const aiPieces = POSITIONS.filter(p => board[p] === this.playerNum).length;
+            const opponentPieces = POSITIONS.filter(p => board[p] === this.opponentNum).length;
+            if (opponentPieces < 3) return 10000;
+            if (aiPieces < 3) return -10000;
+            const aiMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.playerNum)).length;
+            const opponentMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.opponentNum)).length;
+            return (aiPieces - opponentPieces) * 10 + (aiMills - opponentMills) * 25;
+        }
+
+        _getAllPossibleMoves(board, player, phase, piecesToPlace) {
+            const moves = [];
+            if (phase === 1) {
+                if (piecesToPlace[player] > 0) {
+                    POSITIONS.filter(p => board[p] === 0).forEach(pos => moves.push({ action: 'place', pos }));
+                }
+            } else {
+                const playerPieces = POSITIONS.filter(p => board[p] === player);
+                playerPieces.forEach(pos => {
+                    ADJACENCY[pos].filter(n => board[n] === 0).forEach(n => moves.push({ action: 'move', from: pos, to: n }));
+                });
+            }
+            return moves;
+        }
+
+        _makeMove(board, move, player, phase, piecesToPlace) {
+            const newBoard = { ...board };
+            const newPiecesToPlace = { ...piecesToPlace };
+            if (move.action === 'place') {
+                newBoard[move.pos] = player;
+                newPiecesToPlace[player]--;
+            } else if (move.action === 'move') {
+                newBoard[move.from] = 0;
+                newBoard[move.to] = player;
+            }
+            const posMovedTo = move.pos || move.to;
+            if (this._checkMill(newBoard, posMovedTo, player)) {
+                const opponentNum = 3 - player;
+                const opponentPieces = POSITIONS.filter(p => newBoard[p] === opponentNum);
+                let removable = opponentPieces.filter(p => !this._isPieceInMill(newBoard, p));
+                if (removable.length === 0) removable = opponentPieces;
+                if (removable.length > 0) newBoard[removable[0]] = 0;
+            }
+            const newPhase = (newPiecesToPlace[1] === 0 && newPiecesToPlace[2] === 0) ? 2 : 1;
+            return [newBoard, newPhase, newPiecesToPlace];
+        }
+
+        _isPieceInMill(board, pos) {
+            const player = board[pos];
+            if (player === 0) return false;
+            return MILLS.some(mill => mill.includes(pos) && mill.every(p => board[p] === player));
+        }
+        
+        _checkMill(board, pos, player) {
+            return MILLS.some(mill => mill.includes(pos) && mill.every(p => board[p] === player));
+        }
+
+        _isGameOver(board, phase) {
+            if (phase < 2) return false;
+            const p1Count = POSITIONS.filter(p => board[p] === 1).length;
+            const p2Count = POSITIONS.filter(p => board[p] === 2).length;
+            return p1Count < 3 || p2Count < 3;
+        }
+    }
+
+    // --- 3. Game Class ---
+    class Game {
+        constructor(svgElement, UIElements, gameMode) {
+            this.svg = svgElement;
+            this.ui = UIElements;
+            this.gameMode = gameMode;
+            this.ai = gameMode === 'pve' ? new AIPlayer(2) : null;
+            this.initialize();
+        }
+
+        initialize() {
+            this.board = {};
+            POSITIONS.forEach(pos => this.board[pos] = 0);
+            this.phase = 1;
+            this.turn = 1;
+            this.piecesToPlace = { 1: 12, 2: 12 };
+            this.gameState = "place";
+            this.selectedPiecePos = null;
+            this.drawBoard();
+            this.updateUI();
+            this.ui.restartButton.style.display = 'none';
+        }
+
+        drawBoard() {
+            this.svg.innerHTML = '';
+            const bg = document.createElementNS(SVG_NS, 'rect');
+            bg.setAttribute('width', 640);
+            bg.setAttribute('height', 640);
+            bg.setAttribute('class', 'board-bg');
+            this.svg.appendChild(bg);
+            const drawnLines = new Set();
+            POSITIONS.forEach(pos => {
+                ADJACENCY[pos].forEach(neighbor => {
+                    const lineId = [pos, neighbor].sort().join('-');
+                    if (!drawnLines.has(lineId)) {
+                        const line = document.createElementNS(SVG_NS, 'line');
+                        line.setAttribute('x1', COORDS[pos].x);
+                        line.setAttribute('y1', COORDS[pos].y);
+                        line.setAttribute('x2', COORDS[neighbor].x);
+                        line.setAttribute('y2', COORDS[neighbor].y);
+                        line.setAttribute('class', 'board-line');
+                        this.svg.appendChild(line);
+                        drawnLines.add(lineId);
+                    }
+                });
+            });
+            POSITIONS.forEach(pos => {
+                const group = document.createElementNS(SVG_NS, 'g');
+                group.setAttribute('id', `group-${pos}`);
+                this.svg.appendChild(group);
+                const point = document.createElementNS(SVG_NS, 'circle');
+                point.setAttribute('cx', COORDS[pos].x);
+                point.setAttribute('cy', COORDS[pos].y);
+                point.setAttribute('r', `${CLICK_RADIUS}`);
+                point.setAttribute('class', 'board-point');
+                const handleInteraction = (event) => {
+                    event.preventDefault();
+                    if (this.gameMode === 'pve' && this.turn === this.ai.playerNum) return;
+                    this.handleClick(pos);
+                };
+                point.addEventListener('mousedown', handleInteraction);
+                point.addEventListener('touchstart', handleInteraction, { passive: false });
+                group.appendChild(point);
+            });
+        }
+        
+        updateUI() {
+            POSITIONS.forEach(pos => {
+                const group = document.getElementById(`group-${pos}`);
+                const oldVisuals = group.querySelectorAll('.piece, .piece-blocked, .highlight-selected, .highlight-valid');
+                oldVisuals.forEach(v => v.remove());
+                const val = this.board[pos];
+                if (val === 1 || val === 2) {
+                    const piece = document.createElementNS(SVG_NS, 'circle');
+                    piece.setAttribute('cx', COORDS[pos].x);
+                    piece.setAttribute('cy', COORDS[pos].y);
+                    piece.setAttribute('r', `${PIECE_RADIUS}`);
+                    piece.setAttribute('class', `piece piece-p${val}`);
+                    group.appendChild(piece);
+                }
+            });
+            if (this.selectedPiecePos) {
+                const group = document.getElementById(`group-${this.selectedPiecePos}`);
+                const highlight = document.createElementNS(SVG_NS, 'circle');
+                highlight.setAttribute('cx', COORDS[this.selectedPiecePos].x);
+                highlight.setAttribute('cy', COORDS[this.selectedPiecePos].y);
+                highlight.setAttribute('r', `${CLICK_RADIUS - 2}`);
+                highlight.setAttribute('class', 'highlight-selected');
+                group.appendChild(highlight);
+                ADJACENCY[this.selectedPiecePos].forEach(neighbor => {
+                    if (this.board[neighbor] === 0) {
+                        const validMove = document.createElementNS(SVG_NS, 'circle');
+                        validMove.setAttribute('cx', COORDS[neighbor].x);
+                        validMove.setAttribute('cy', COORDS[neighbor].y);
+                        validMove.setAttribute('r', '15');
+                        validMove.setAttribute('class', 'highlight-valid');
+                        document.getElementById(`group-${neighbor}`).appendChild(validMove);
+                    }
+                });
+            }
+            this.updateMessage();
+            const [p1Count, p2Count] = this.getPieceCounts();
+            if (this.phase === 1) {
+                this.ui.p1Info.textContent = `待放: ${this.piecesToPlace[1]}`;
+                this.ui.p2Info.textContent = `待放: ${this.piecesToPlace[2]}`;
+            } else {
+                this.ui.p1Info.textContent = `棋子: ${p1Count}`;
+                this.ui.p2Info.textContent = `棋子: ${p2Count}`;
+            }
+            if (this.gameState === 'game_over') {
+                this.ui.restartButton.style.display = 'block';
+            }
+        }
+        
+        updateMessage(text = null, isError = false) {
+            let msg = text;
+            if (!msg) {
+                const p1Name = this.gameMode === 'pve' ? "您" : "白方";
+                const p2Name = this.gameMode === 'pve' ? "电脑" : "黑方";
+                const playerName = this.turn === 1 ? p1Name : p2Name;
+                switch (this.gameState) {
+                    case "place": msg = `${playerName}回合: 请放置棋子`; break;
+                    case "remove": msg = `${playerName}成三! 请移除对方棋子`; break;
+                    case "move_select": msg = `${playerName}回合: 请选择棋子移动`; break;
+                    case "move_place": msg = `${playerName}回合: 请选择目标位置`; break;
+                    case "game_over":
+                        const winnerName = this.turn === 1 ? p1Name : p2Name;
+                        msg = `游戏结束! ${winnerName} 胜利!`;
+                        break;
+                }
+            }
+            this.ui.message.textContent = msg;
+            this.ui.message.classList.toggle('error-message', isError);
+            if(isError) setTimeout(() => this.ui.message.classList.remove('error-message'), 500);
+        }
+        
+        switchTurn() {
+            this.turn = 3 - this.turn;
+            if (this.phase === 1 && this.piecesToPlace[1] === 0 && this.piecesToPlace[2] === 0) {
+                this.phase = 2;
+                this.turn = 2; 
+                this.gameState = "move_select";
+            } else if (this.phase === 2) {
+                if (this.checkWinCondition()) return;
+                if (this.checkStalemate()) {
+                    this.gameState = "game_over";
+                    this.updateMessage(`被困住! ${this.turn === 1 ? '黑方' : '白方'}胜利!`, false);
+                    this.updateUI();
+                    return;
+                }
+                this.gameState = "move_select";
+            } else {
+                this.gameState = "place";
+            }
+            this.selectedPiecePos = null;
+            this.checkAndTriggerAI();
+        }
+
+        handleClick(pos) {
+            const handlers = {
+                "place": this.handlePlace, "remove": this.handleRemove,
+                "move_select": this.handleMoveSelect, "move_place": this.handleMovePlace,
+            };
+            if (handlers[this.gameState]) {
+                handlers[this.gameState].call(this, pos);
+            }
+            this.updateUI();
+        }
+
+        handlePlace(pos) {
+            if (this.board[pos] !== 0) return this.updateMessage("请选择一个空位", true);
+            this.board[pos] = this.turn;
+            this.piecesToPlace[this.turn]--;
+            if (this.isMill(pos, this.turn)) {
+                if (this.hasValidCaptureTarget()) this.gameState = "remove";
+                else this.switchTurn();
+            } else this.switchTurn();
+        }
+
+        handleRemove(pos) {
+            const opponent = 3 - this.turn;
+            if (this.board[pos] !== opponent) return this.updateMessage("请选择对方的棋子", true);
+            if (this.isPieceInMill(pos) && this.hasValidCaptureTarget()) return this.updateMessage("不能移除已成三的棋子", true);
+            this.board[pos] = 0;
+            if (this.checkWinCondition()) return;
+            this.gameState = this.phase === 1 ? "place" : "move_select";
+            this.switchTurn();
+        }
+
+        handleMoveSelect(pos) {
+            if (this.board[pos] !== this.turn) return this.updateMessage("请选择自己的棋子", true);
+            this.selectedPiecePos = pos;
+            this.gameState = "move_place";
+        }
+
+        handleMovePlace(pos) {
+            if (this.board[pos] === this.turn) return this.handleMoveSelect(pos);
+            if (this.board[pos] !== 0 || !ADJACENCY[this.selectedPiecePos].includes(pos)) {
+                this.selectedPiecePos = null;
+                this.gameState = "move_select";
+                return this.updateMessage("无效移动", true);
+            }
+            this.board[this.selectedPiecePos] = 0;
+            this.board[pos] = this.turn;
+            this.selectedPiecePos = null;
+            if (this.isMill(pos, this.turn)) {
+                if (this.hasValidCaptureTarget()) this.gameState = "remove";
+                else this.switchTurn();
+            } else this.switchTurn();
+        }
+        
+        getPieceCounts() {
+            let p1 = 0, p2 = 0;
+            POSITIONS.forEach(pos => {
+                if (this.board[pos] === 1) p1++;
+                else if (this.board[pos] === 2) p2++;
+            });
+            return [p1, p2];
+        }
+
+        isMill(pos, player) { return MILLS.some(mill => mill.includes(pos) && mill.every(p => this.board[p] === player)); }
+        
+        isPieceInMill(pos) {
+            const player = this.board[pos];
+            if (player === 0) return false;
+            return this.isMill(pos, player);
+        }
+        
+        hasValidCaptureTarget() {
+            const opponent = 3 - this.turn;
+            const opponentPieces = POSITIONS.filter(p => this.board[p] === opponent);
+            return opponentPieces.some(p => !this.isPieceInMill(p));
+        }
+
+        checkWinCondition() {
+            if (this.phase !== 2) return false;
+            const [p1Count, p2Count] = this.getPieceCounts();
+            if (p1Count < 3 || p2Count < 3) {
+                this.gameState = "game_over";
+                return true;
+            }
+            return false;
+        }
+        
+        checkStalemate() {
+            if (this.phase !== 2) return false;
+            return !POSITIONS.some(pos => this.board[pos] === this.turn && ADJACENCY[pos].some(n => this.board[n] === 0));
+        }
+
+        checkAndTriggerAI() {
+            if (this.gameMode === 'pve' && this.turn === this.ai.playerNum && this.gameState !== 'game_over') {
+                setTimeout(() => {
+                    const move = this.ai.findBestMove(this);
+                    if (move) this.handleClick(move.pos || move.from);
+                    setTimeout(() => {
+                        if (this.gameState === "move_place" || this.gameState === "remove") {
+                            const nextMove = this.ai.findBestMove(this);
+                            if (nextMove) this.handleClick(nextMove.pos || nextMove.to);
+                        }
+                    }, 200);
+                }, 600);
+            }
+        }
+    }
+
+    // --- 4. App Initialization ---
+    document.addEventListener('DOMContentLoaded', () => {
+        const gameMenu = document.getElementById('game-menu');
+        const gameContainer = document.getElementById('game-container');
+        const pveButton = document.getElementById('pve-button');
+        const pvpButton = document.getElementById('pvp-button');
+        const restartButton = document.getElementById('restart-button');
+
+        const startGame = (mode) => {
+            gameMenu.style.display = 'none';
+            gameContainer.style.display = 'flex';
+            const svgElement = document.getElementById('board-svg');
+            const UIElements = {
+                message: document.getElementById('message'),
+                p1Info: document.getElementById('p1-info'),
+                p2Info: document.getElementById('p2-info'),
+                restartButton: restartButton
+            };
+            new Game(svgElement, UIElements, mode);
+        };
+
+        pveButton.onclick = () => startGame('pve');
+        pvpButton.onclick = () => startGame('pvp');
+        restartButton.onclick = () => {
+            gameContainer.style.display = 'none';
+            gameMenu.style.display = 'block';
+            restartButton.style.display = 'none';
+        };
+    });
+    </script>
+</body>
+</html>
