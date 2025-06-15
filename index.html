@@ -36,6 +36,7 @@
         #game-container {
             display: none; width: 100%; max-width: var(--board-size); flex-direction: column;
             align-items: center; gap: 20px;
+            position: relative; /* <--- 新增此行，为按钮提供定位参照物 */
         }
         #board-svg {
             width: var(--board-size); height: var(--board-size);
@@ -83,7 +84,12 @@
         
         /* --- Styles for Instructions Button & Modal --- */
         #instructions-button {
-            position: absolute; top: 15px; right: 15px; width: 40px; height: 40px;
+            position: absolute;
+            top: 50%;
+            right: -50px; /* 将按钮定位在容器右边线外侧50像素处 */
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
             background-color: var(--color-highlight); color: white; border-radius: 50%;
             display: flex; align-items: center; justify-content: center; font-size: 1.6rem;
             font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
