@@ -16,19 +16,19 @@
             --color-valid-move: #2ecc40; /* Green */
             --color-text: #333333;
             --color-error: #b33a3a;
-            --board-size: 90vmin;
+            --board-size: 90vmin; 
         }
 
         @media (min-width: 800px) {
             :root {
-                --board-size: 640px;
+                --board-size: min(600px, 85vh);
             }
         }
-
+        
         html, body {
             width: 100%;
-            height: 100%;
-            overflow: hidden; /* 防止移动端拖动 */
+            margin: 0;
+            padding: 0;
         }
 
         body {
@@ -38,15 +38,14 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            margin: 0;
             background-color: var(--color-bg);
             color: var(--color-text);
-            padding: 10px;
+            padding: 15px;
             box-sizing: border-box;
-            -webkit-user-select: none; /* Safari/Chrome */
-            -moz-user-select: none; /* Firefox */
-            -ms-user-select: none; /* IE10+ */
-            user-select: none; /* Standard */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
 
         /* --- 2. Game Menu Styles --- */
@@ -112,8 +111,7 @@
         .piece { stroke-width: 2; stroke: rgba(0,0,0,0.3); transition: all 0.2s ease-in-out; pointer-events: none; }
         .piece-p1 { fill: var(--color-player1); }
         .piece-p2 { fill: var(--color-player2); }
-        .piece-blocked { stroke: var(--color-highlight); stroke-width: 3; stroke-dasharray: 4 4; animation: rotate 8s linear infinite; transform-origin: center; }
-        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .piece-blocked { stroke: var(--color-highlight); stroke-width: 4; stroke-linecap: round; }
         .highlight-selected { fill: none; stroke: var(--color-highlight); stroke-width: 4; pointer-events: none; }
         .highlight-valid { fill: var(--color-valid-move); opacity: 0.5; pointer-events: none; }
 
@@ -214,7 +212,7 @@
             if (game.gameState === "remove") {
                 return this._findBestRemoval(game.board);
             }
-            const _, bestMove = this.minimax(game.board, this.searchDepth, -Infinity, Infinity, true, game.phase, game.piecesToPlace);
+            const [score, bestMove] = this.minimax(game.board, this.searchDepth, -Infinity, Infinity, true, game.phase, game.piecesToPlace);
             return bestMove;
         }
 
@@ -408,6 +406,24 @@
                     piece.setAttribute('r', `${PIECE_RADIUS}`);
                     piece.setAttribute('class', `piece piece-p${val}`);
                     group.appendChild(piece);
+                } 
+                else if (val === -1) {
+                    const cross1 = document.createElementNS(SVG_NS, 'line');
+                    const cross2 = document.createElementNS(SVG_NS, 'line');
+                    const coord = COORDS[pos];
+                    const size = PIECE_RADIUS * 0.7;
+                    cross1.setAttribute('x1', coord.x - size);
+                    cross1.setAttribute('y1', coord.y - size);
+                    cross1.setAttribute('x2', coord.x + size);
+                    cross1.setAttribute('y2', coord.y + size);
+                    cross2.setAttribute('x1', coord.x + size);
+                    cross2.setAttribute('y1', coord.y - size);
+                    cross2.setAttribute('x2', coord.x - size);
+                    cross2.setAttribute('y2', coord.y + size);
+                    cross1.setAttribute('class', 'piece-blocked');
+                    cross2.setAttribute('class', 'piece-blocked');
+                    group.appendChild(cross1);
+                    group.appendChild(cross2);
                 }
             });
             if (this.selectedPiecePos) {
@@ -455,8 +471,8 @@
                     case "move_select": msg = `${playerName}回合: 请选择棋子移动`; break;
                     case "move_place": msg = `${playerName}回合: 请选择目标位置`; break;
                     case "game_over":
-                        const winnerName = this.turn === 1 ? p1Name : p2Name;
-                        msg = `游戏结束! ${winnerName} 胜利!`;
+                        const winner = this.getPieceCounts()[0] < 3 ? p2Name : p1Name;
+                        msg = `游戏结束! ${winner} 胜利!`;
                         break;
                 }
             }
@@ -469,6 +485,7 @@
             this.turn = 3 - this.turn;
             if (this.phase === 1 && this.piecesToPlace[1] === 0 && this.piecesToPlace[2] === 0) {
                 this.phase = 2;
+                POSITIONS.forEach(pos => { if (this.board[pos] === -1) this.board[pos] = 0; });
                 this.turn = 2; 
                 this.gameState = "move_select";
             } else if (this.phase === 2) {
@@ -484,7 +501,8 @@
                 this.gameState = "place";
             }
             this.selectedPiecePos = null;
-            this.checkAndTriggerAI();
+            this.updateUI();
+            this.triggerAITurn();
         }
 
         handleClick(pos) {
@@ -495,7 +513,6 @@
             if (handlers[this.gameState]) {
                 handlers[this.gameState].call(this, pos);
             }
-            this.updateUI();
         }
 
         handlePlace(pos) {
@@ -506,14 +523,20 @@
                 if (this.hasValidCaptureTarget()) this.gameState = "remove";
                 else this.switchTurn();
             } else this.switchTurn();
+            this.updateUI();
         }
 
         handleRemove(pos) {
             const opponent = 3 - this.turn;
             if (this.board[pos] !== opponent) return this.updateMessage("请选择对方的棋子", true);
             if (this.isPieceInMill(pos) && this.hasValidCaptureTarget()) return this.updateMessage("不能移除已成三的棋子", true);
-            this.board[pos] = 0;
-            if (this.checkWinCondition()) return;
+            
+            this.board[pos] = this.phase === 1 ? -1 : 0;
+
+            if (this.checkWinCondition()) {
+                this.updateUI();
+                return;
+            };
             this.gameState = this.phase === 1 ? "place" : "move_select";
             this.switchTurn();
         }
@@ -522,6 +545,7 @@
             if (this.board[pos] !== this.turn) return this.updateMessage("请选择自己的棋子", true);
             this.selectedPiecePos = pos;
             this.gameState = "move_place";
+            this.updateUI();
         }
 
         handleMovePlace(pos) {
@@ -538,6 +562,7 @@
                 if (this.hasValidCaptureTarget()) this.gameState = "remove";
                 else this.switchTurn();
             } else this.switchTurn();
+            this.updateUI();
         }
         
         getPieceCounts() {
@@ -553,18 +578,19 @@
         
         isPieceInMill(pos) {
             const player = this.board[pos];
-            if (player === 0) return false;
+            if (player < 1) return false;
             return this.isMill(pos, player);
         }
         
         hasValidCaptureTarget() {
             const opponent = 3 - this.turn;
             const opponentPieces = POSITIONS.filter(p => this.board[p] === opponent);
+            if (opponentPieces.length === 0) return false;
             return opponentPieces.some(p => !this.isPieceInMill(p));
         }
 
         checkWinCondition() {
-            if (this.phase !== 2) return false;
+            if (this.phase < 2) return false;
             const [p1Count, p2Count] = this.getPieceCounts();
             if (p1Count < 3 || p2Count < 3) {
                 this.gameState = "game_over";
@@ -577,20 +603,43 @@
             if (this.phase !== 2) return false;
             return !POSITIONS.some(pos => this.board[pos] === this.turn && ADJACENCY[pos].some(n => this.board[n] === 0));
         }
-
-        checkAndTriggerAI() {
-            if (this.gameMode === 'pve' && this.turn === this.ai.playerNum && this.gameState !== 'game_over') {
-                setTimeout(() => {
-                    const move = this.ai.findBestMove(this);
-                    if (move) this.handleClick(move.pos || move.from);
-                    setTimeout(() => {
-                        if (this.gameState === "move_place" || this.gameState === "remove") {
-                            const nextMove = this.ai.findBestMove(this);
-                            if (nextMove) this.handleClick(nextMove.pos || nextMove.to);
-                        }
-                    }, 200);
-                }, 600);
+        
+        // 【修复】重写AI行动逻辑
+        triggerAITurn() {
+            if (this.gameMode !== 'pve' || this.turn !== this.ai.playerNum || this.gameState === 'game_over') {
+                return;
             }
+
+            // 使用延时让玩家能看清AI的动作
+            setTimeout(() => {
+                // 1. 获取AI的主要动作 (放置或移动)
+                const primaryMove = this.ai.findBestMove(this);
+                if (!primaryMove) { // AI无棋可走
+                    this.checkStalemate(); 
+                    this.updateUI();
+                    return;
+                }
+
+                // 2. 执行主要动作
+                if (primaryMove.action === 'place') {
+                    this.handlePlace(primaryMove.pos);
+                } else if (primaryMove.action === 'move') {
+                    // 移动需要两步，直接调用内部方法
+                    this.handleMoveSelect(primaryMove.from);
+                    this.handleMovePlace(primaryMove.to);
+                }
+                
+                // 3. 如果执行后需要移除棋子，则执行移除动作
+                if (this.gameState === 'remove') {
+                    // 再次延时，让移除动作有停顿感
+                    setTimeout(() => {
+                        const removalMove = this.ai.findBestMove(this);
+                        if (removalMove) {
+                            this.handleRemove(removalMove.pos);
+                        }
+                    }, 500);
+                }
+            }, 800);
         }
     }
 
@@ -601,6 +650,7 @@
         const pveButton = document.getElementById('pve-button');
         const pvpButton = document.getElementById('pvp-button');
         const restartButton = document.getElementById('restart-button');
+        let gameInstance = null;
 
         const startGame = (mode) => {
             gameMenu.style.display = 'none';
@@ -612,7 +662,8 @@
                 p2Info: document.getElementById('p2-info'),
                 restartButton: restartButton
             };
-            new Game(svgElement, UIElements, mode);
+            gameInstance = new Game(svgElement, UIElements, mode);
+            gameInstance.triggerAITurn(); // 如果AI先手(目前不会)，需要在这里触发
         };
 
         pveButton.onclick = () => startGame('pve');
@@ -621,6 +672,7 @@
             gameContainer.style.display = 'none';
             gameMenu.style.display = 'block';
             restartButton.style.display = 'none';
+            gameInstance = null;
         };
     });
     </script>
