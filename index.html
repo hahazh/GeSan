@@ -46,8 +46,16 @@
         .board-line { stroke: var(--color-line); stroke-width: 4; stroke-linecap: round; }
         .board-point { fill: rgba(0,0,0,0.2); cursor: pointer; transition: r 0.2s ease, fill 0.2s ease; }
         .piece {
-            stroke-width: 2; stroke: rgba(0,0,0,0.3); transition: all 0.2s ease-in-out;
+            stroke-width: 2; stroke: rgba(0,0,0,0.3); 
+            transition: cx 0.4s ease-in-out, cy 0.4s ease-in-out, transform 0.2s ease-in-out;
             pointer-events: none;
+        }
+        @keyframes piece-pop-in {
+            0% { transform: scale(0.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .piece-pop-in {
+            animation: piece-pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .piece-p1 { fill: var(--color-player1); }
         .piece-p2 { fill: var(--color-player2); }
@@ -130,6 +138,29 @@
         #rules-content ul { padding-left: 25px; list-style-type: disc; }
         #rules-content strong { color: #000; font-weight: 600; }
 
+        .explosion-particle {
+            pointer-events: none;
+            transition: cx 0.5s ease-out, cy 0.5s ease-out, opacity 0.5s ease-out;
+        }
+
+        @keyframes pulse-glow {
+            0% { stroke-width: 2; stroke: rgba(0,0,0,0.3); }
+            50% { stroke-width: 8; stroke: var(--color-highlight); }
+            100% { stroke-width: 2; stroke: rgba(0,0,0,0.3); }
+        }
+        .mill-highlight-piece {
+            animation: pulse-glow 1s ease-in-out;
+        }
+
+        @keyframes invalid-move-shake {
+            0%, 100% { transform: translateX(0); fill: rgba(0,0,0,0.2); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+            50% { fill: var(--color-error); }
+        }
+        .invalid-move {
+            animation: invalid-move-shake 0.4s ease-in-out;
+        }
     </style>
 </head>
 <body>
@@ -206,7 +237,7 @@
 
     // --- 2. AI Player Class ---
     class AIPlayer {
-        constructor(playerNumber, searchDepth = 3) {
+        constructor(playerNumber, searchDepth = 4) {
             this.playerNum = playerNumber;
             this.opponentNum = 3 - playerNumber;
             this.searchDepth = searchDepth;
@@ -293,13 +324,45 @@
                 possibleRemovals = opponentPieces;
             }
             if (possibleRemovals.length === 0) return null;
-            // 简单策略：随机移除一个。可以优化为移除能破坏对方潜在三连的棋子。
-            return { action: 'remove', pos: possibleRemovals[Math.floor(Math.random() * possibleRemovals.length)] };
+
+            // 策略1: 优先移除能构成“二连”的棋子 (潜在威胁)
+            for (const mill of MILLS) {
+                const opponentPiecesInMill = mill.filter(p => board[p] === this.opponentNum);
+                const emptySpotsInMill = mill.filter(p => board[p] === 0);
+
+                if (opponentPiecesInMill.length === 2 && emptySpotsInMill.length === 1) {
+                    const threat1 = opponentPiecesInMill[0];
+                    const threat2 = opponentPiecesInMill[1];
+                    if (possibleRemovals.includes(threat1)) {
+                         console.log("AI策略: 移除构成威胁的棋子", threat1);
+                         return { action: 'remove', pos: threat1 };
+                    }
+                    if (possibleRemovals.includes(threat2)) {
+                         console.log("AI策略: 移除构成威胁的棋子", threat2);
+                         return { action: 'remove', pos: threat2 };
+                    }
+                }
+            }
+            
+            // 策略2: 如果没有紧急威胁，移除一个最“自由”的棋子 (移动性高)
+            let bestPieceToRemove = possibleRemovals[0];
+            let maxMobility = -1;
+
+            for (const piece of possibleRemovals) {
+                const mobility = ADJACENCY[piece].filter(adj => board[adj] === 0).length;
+                if (mobility > maxMobility) {
+                    maxMobility = mobility;
+                    bestPieceToRemove = piece;
+                }
+            }
+            
+            console.log("AI策略: 移除移动性最高的棋子", bestPieceToRemove);
+            return { action: 'remove', pos: bestPieceToRemove };
         }
 
         minimax(board, depth, alpha, beta, isMaximizing, phase, piecesToPlace) {
             if (depth === 0 || this._isGameOver(board, phase)) {
-                return [this.evaluateBoard(board), null];
+                return [this.evaluateBoard(board, phase), null];
             }
             const possibleMoves = this._getAllPossibleMoves(board, isMaximizing ? this.playerNum : this.opponentNum, phase, piecesToPlace);
             let bestMove = possibleMoves.length > 0 ? possibleMoves[0] : null;
@@ -333,14 +396,53 @@
             }
         }
         
-        evaluateBoard(board) {
-            const aiPieces = POSITIONS.filter(p => board[p] === this.playerNum).length;
-            const opponentPieces = POSITIONS.filter(p => board[p] === this.opponentNum).length;
-            if (opponentPieces < 3) return 10000;
-            if (aiPieces < 3) return -10000;
-            const aiMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.playerNum)).length;
-            const opponentMills = MILLS.filter(mill => mill.every(pos => board[pos] === this.opponentNum)).length;
-            return (aiPieces - opponentPieces) * 10 + (aiMills - opponentMills) * 25;
+        evaluateBoard(board, phase) {
+            const aiPiecesCount = POSITIONS.filter(p => board[p] === this.playerNum).length;
+            const opponentPiecesCount = POSITIONS.filter(p => board[p] === this.opponentNum).length;
+
+            // 游戏结束的极端情况
+            if (opponentPiecesCount < 3) return 10000;
+            if (aiPiecesCount < 3) return -10000;
+
+            const pieceDiff = aiPiecesCount - opponentPiecesCount;
+            
+            let millScore = 0;
+            let potentialMillScore = 0;
+            for (const mill of MILLS) {
+                const aiCount = mill.filter(p => board[p] === this.playerNum).length;
+                const opponentCount = mill.filter(p => board[p] === this.opponentNum).length;
+
+                if (aiCount === 3) {
+                    millScore += 25; // AI形成了一个“三连”
+                } else if (opponentCount === 3) {
+                    millScore -= 25; // 对手形成了一个“三连”
+                } else if (aiCount === 2 && opponentCount === 0) {
+                    potentialMillScore += 5; // AI有一个潜在的“三连”
+                } else if (opponentCount === 2 && aiCount === 0) {
+                    potentialMillScore -= 10; // 对手有一个潜在的“三连”（防守更重要）
+                }
+            }
+            
+            let mobilityScore = 0;
+            // 棋子机动性评估 (只在移动阶段有意义)
+            if(phase === 2) {
+                 const aiMoves = this._getMobility(board, this.playerNum);
+                 const opponentMoves = this._getMobility(board, this.opponentNum);
+                 mobilityScore = aiMoves - opponentMoves;
+            }
+
+            // 最终评估分数
+            const finalScore = (pieceDiff * 15) + millScore + potentialMillScore + mobilityScore;
+            return finalScore;
+        }
+
+        _getMobility(board, player) {
+            let mobility = 0;
+            const playerPieces = POSITIONS.filter(p => board[p] === player);
+            for (const piece of playerPieces) {
+                mobility += ADJACENCY[piece].filter(adj => board[adj] === 0).length;
+            }
+            return mobility;
         }
 
         _getAllPossibleMoves(board, player, phase, piecesToPlace) {
@@ -406,6 +508,7 @@
             this.gameMode = gameMode;
             this.ai = gameMode === 'pve' ? new AIPlayer(2) : null;
             this.gamePaused = false; // <-- NEW: Game pause state
+            this.animationHint = {};
             this.initialize();
         }
 
@@ -417,6 +520,7 @@
             this.piecesToPlace = { 1: 12, 2: 12 };
             this.gameState = "place";
             this.selectedPiecePos = null;
+            this.animationHint = {};
             this.drawBoard();
             this.updateUI();
             this.ui.restartButton.style.display = 'none';
@@ -466,6 +570,9 @@
         }
         
         updateUI() {
+            const animationHints = { ...this.animationHint }; // Copy hints
+            this.animationHint = {}; // Clear hints for the next redraw
+
             POSITIONS.forEach(pos => {
                 const group = document.getElementById(`group-${pos}`);
                 const oldVisuals = group.querySelectorAll('.piece, .piece-blocked, .highlight-selected, .highlight-valid');
@@ -473,12 +580,20 @@
                 const val = this.board[pos];
                 if (val === 1 || val === 2) {
                     const piece = document.createElementNS(SVG_NS, 'circle');
-                    piece.setAttribute('cx', COORDS[pos].x);
-                    piece.setAttribute('cy', COORDS[pos].y);
                     piece.setAttribute('r', `${PIECE_RADIUS}`);
                     piece.setAttribute('class', `piece piece-p${val}`);
+                    
+                    // Set initial coordinates based on animation hints
+                    if (animationHints.moved && animationHints.moved.to === pos) {
+                        const fromCoords = COORDS[animationHints.moved.from];
+                        piece.setAttribute('cx', fromCoords.x);
+                        piece.setAttribute('cy', fromCoords.y);
+                    } else {
+                        piece.setAttribute('cx', COORDS[pos].x);
+                        piece.setAttribute('cy', COORDS[pos].y);
+                    }
                     group.appendChild(piece);
-                } 
+                }
                 else if (val === -1) {
                     const cross1 = document.createElementNS(SVG_NS, 'line');
                     const cross2 = document.createElementNS(SVG_NS, 'line');
@@ -498,6 +613,36 @@
                     group.appendChild(cross2);
                 }
             });
+
+            // --- Trigger Animations ---
+            setTimeout(() => {
+                if (animationHints.moved) {
+                    const piece = document.querySelector(`#group-${animationHints.moved.to} .piece`);
+                    if (piece) {
+                        const toCoords = COORDS[animationHints.moved.to];
+                        piece.setAttribute('cx', toCoords.x);
+                        piece.setAttribute('cy', toCoords.y);
+                    }
+                } else if (animationHints.placed) {
+                    const piece = document.querySelector(`#group-${animationHints.placed} .piece`);
+                    if (piece) {
+                        piece.classList.add('piece-pop-in');
+                        piece.addEventListener('animationend', () => piece.classList.remove('piece-pop-in'), { once: true });
+                    }
+                }
+
+                if (animationHints.mill) {
+                    animationHints.mill.forEach(millPos => {
+                        const piece = document.querySelector(`#group-${millPos} .piece`);
+                        if (piece) {
+                            piece.classList.add('mill-highlight-piece');
+                            piece.addEventListener('animationend', () => piece.classList.remove('mill-highlight-piece'), { once: true });
+                        }
+                    });
+                }
+            }, 10);
+
+
             if (this.selectedPiecePos) {
                 const group = document.getElementById(`group-${this.selectedPiecePos}`);
                 const highlight = document.createElementNS(SVG_NS, 'circle');
@@ -595,21 +740,80 @@
         }
 
         handlePlace(pos) {
-            if (this.board[pos] !== 0) return this.updateMessage("请选择一个空位", true);
+            if (this.board[pos] !== 0) {
+                this.triggerInvalidMoveAnimation(pos);
+                return this.updateMessage("请选择一个空位", true);
+            }
             this.board[pos] = this.turn;
             this.piecesToPlace[this.turn]--;
-            if (this.isMill(pos, this.turn)) {
-                if (this.hasValidCaptureTarget()) this.gameState = "remove";
-                else this.switchTurn();
-            } else this.switchTurn();
-            this.updateUI();
+
+            const formedMill = this.getMill(pos, this.turn);
+            this.animationHint = { placed: pos, mill: formedMill }; // Set hint for UI update
+
+            if (formedMill) {
+                if (this.hasValidCaptureTarget()) {
+                    this.gameState = "remove";
+                    this.updateUI(); 
+                } else {
+                    this.switchTurn();
+                }
+            } else {
+                this.switchTurn();
+            }
         }
 
         handleRemove(pos) {
             const opponent = 3 - this.turn;
-            if (this.board[pos] !== opponent) return this.updateMessage("请选择对方的棋子", true);
-            if (this.isPieceInMill(pos) && this.hasValidCaptureTarget()) return this.updateMessage("不能移除已成三的棋子", true);
+            if (this.board[pos] !== opponent) {
+                this.triggerInvalidMoveAnimation(pos);
+                return this.updateMessage("请选择对方的棋子", true);
+            }
+            if (this.isPieceInMill(pos) && this.hasValidCaptureTarget()) {
+                this.triggerInvalidMoveAnimation(pos);
+                return this.updateMessage("不能移除已成三的棋子", true);
+            }
             
+            // --- Explosion Animation ---
+            const pieceElement = document.querySelector(`#group-${pos} .piece`);
+            if (pieceElement) {
+                const coord = COORDS[pos];
+                const pieceColor = pieceElement.classList.contains('piece-p1') ? 'var(--color-player1)' : 'var(--color-player2)';
+
+                // Hide the main piece right away
+                pieceElement.style.display = 'none'; 
+
+                const particleCount = 8;
+                const angleStep = (2 * Math.PI) / particleCount;
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = i * angleStep;
+                    const particle = document.createElementNS(SVG_NS, 'circle');
+                    
+                    // Initial state
+                    particle.setAttribute('cx', coord.x);
+                    particle.setAttribute('cy', coord.y);
+                    particle.setAttribute('r', 5);
+                    particle.style.fill = pieceColor;
+                    particle.style.opacity = 1;
+                    particle.classList.add('explosion-particle');
+                    
+                    this.svg.appendChild(particle);
+
+                    const travelDist = 40 + Math.random() * 20;
+                    const targetX = coord.x + Math.cos(angle) * travelDist;
+                    const targetY = coord.y + Math.sin(angle) * travelDist;
+
+                    // Trigger the transition
+                    setTimeout(() => {
+                         particle.setAttribute('cx', targetX);
+                         particle.setAttribute('cy', targetY);
+                         particle.style.opacity = 0;
+                    }, 10);
+                    
+                    // Remove particle after animation
+                    setTimeout(() => particle.remove(), 550); 
+                }
+            }
+
             this.board[pos] = this.phase === 1 ? -1 : 0;
 
             if (this.checkWinCondition()) {
@@ -630,18 +834,29 @@
         handleMovePlace(pos) {
             if (this.board[pos] === this.turn) return this.handleMoveSelect(pos);
             if (this.board[pos] !== 0 || !ADJACENCY[this.selectedPiecePos].includes(pos)) {
+                this.triggerInvalidMoveAnimation(pos);
                 this.selectedPiecePos = null;
                 this.gameState = "move_select";
                 return this.updateMessage("无效移动", true);
             }
+            const fromPos = this.selectedPiecePos;
             this.board[this.selectedPiecePos] = 0;
             this.board[pos] = this.turn;
             this.selectedPiecePos = null;
-            if (this.isMill(pos, this.turn)) {
-                if (this.hasValidCaptureTarget()) this.gameState = "remove";
-                else this.switchTurn();
-            } else this.switchTurn();
-            this.updateUI();
+
+            const formedMill = this.getMill(pos, this.turn);
+            this.animationHint = { moved: { from: fromPos, to: pos }, mill: formedMill };
+
+            if (formedMill) {
+                if (this.hasValidCaptureTarget()) {
+                    this.gameState = "remove";
+                    this.updateUI();
+                } else {
+                    this.switchTurn();
+                }
+            } else {
+                this.switchTurn();
+            }
         }
         
         getPieceCounts() {
@@ -654,6 +869,20 @@
         }
 
         isMill(pos, player) { return MILLS.some(mill => mill.includes(pos) && mill.every(p => this.board[p] === player)); }
+
+        getMill(pos, player) {
+            return MILLS.find(mill => mill.includes(pos) && mill.every(p => this.board[p] === player));
+        }
+
+        triggerInvalidMoveAnimation(pos) {
+            const point = document.querySelector(`#group-${pos} .board-point`);
+            if (point) {
+                point.classList.add('invalid-move');
+                point.addEventListener('animationend', () => point.classList.remove('invalid-move'), { once: true });
+            }
+        }
+        
+        
         
         isPieceInMill(pos) {
             const player = this.board[pos];
